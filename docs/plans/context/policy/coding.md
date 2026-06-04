@@ -24,45 +24,43 @@
 
 | パターン | 例 | 問題 |
 |---------|-----|------|
-| 必須データへのフォールバック | `user?.id ?? 'unknown'` | エラーになるべき状態で処理が進む |
-| デフォルト引数の濫用 | `function f(x = 'default')` で全呼び出し元が省略 | 値がどこから来るか分からない |
-| null合体で渡す口がない | `options?.cwd ?? process.cwd()` で上位から渡す経路なし | 常にフォールバックになる（意味がない） |
-| try-catch で空値返却 | `catch { return ''; }` | エラーを握りつぶす |
-| 不整合な値のサイレントスキップ | `if (a !== expected) return undefined` | 設定ミスが実行時に黙って無視される |
+| 必須データへのフォールバック | `user.id if user else "unknown"` | エラーになるべき状態で処理が進む |
+| デフォルト引数の濫用 | `def f(x="default")` で全呼び出し元が省略 | 値がどこから来るか分からない |
+| フォールバックで渡す口がない | `options.get("cwd") or Path.cwd()` で上位から渡す経路なし | 常にフォールバックになる（意味がない） |
+| try-except で空値返却 | `except Exception: return ""` | エラーを握りつぶす |
+| 不整合な値のサイレントスキップ | `if value != expected: return None` | 設定ミスが実行時に黙って無視される |
 
 ### 正しい実装
 
-```typescript
-// ❌ 禁止 - 必須データへのフォールバック
-const userId = user?.id ?? 'unknown'
-processUser(userId)  // 'unknown' で処理が進んでしまう
+```python
+# ❌ 禁止 - 必須データへのフォールバック
+user_id = user.id if user else "unknown"
+process_user(user_id)  # "unknown" で処理が進んでしまう
 
-// ✅ 正しい - Fail Fast
-if (!user?.id) {
-  throw new Error('User ID is required')
-}
-processUser(user.id)
+# ✅ 正しい - Fail Fast
+if user is None or not user.id:
+    raise ValueError("User ID is required")
+process_user(user.id)
 
-// ❌ 禁止 - デフォルト引数で全呼び出し元が省略
-function loadConfig(path = './config.json') { ... }
-// 全呼び出し元: loadConfig()  ← path を渡していない
+# ❌ 禁止 - デフォルト引数で全呼び出し元が省略
+def load_config(path="./config.json"):
+    ...
+# 全呼び出し元: load_config()  ← path を渡していない
 
-// ✅ 正しい - 必須引数にして明示的に渡す
-function loadConfig(path: string) { ... }
-// 呼び出し元: loadConfig('./config.json')  ← 明示的
+# ✅ 正しい - 必須引数にして明示的に渡す
+def load_config(path: str):
+    ...
+# 呼び出し元: load_config("./config.json")  ← 明示的
 
-// ❌ 禁止 - null合体で渡す口がない
-class Engine {
-  constructor(config, options?) {
-    this.cwd = options?.cwd ?? process.cwd()
-    // 問題: options に cwd を渡す経路がない場合、常に process.cwd() になる
-  }
-}
+# ❌ 禁止 - フォールバックで渡す口がない
+class Engine:
+    def __init__(self, config, options=None):
+        self.cwd = (options or {}).get("cwd") or Path.cwd()
+        # 問題: options に cwd を渡す経路がない場合、常に Path.cwd() になる
 
-// ✅ 正しい - 上位から渡せるようにする
-function createEngine(config, cwd: string) {
-  return new Engine(config, { cwd })
-}
+# ✅ 正しい - 上位から渡せるようにする
+def create_engine(config, cwd: Path):
+    return Engine(config, {"cwd": cwd})
 ```
 
 ### 許容されるケース
@@ -90,33 +88,32 @@ function createEngine(config, cwd: string) {
 | ログ表示用と実行用で別々に解決する | REJECT | 表示と挙動が乖離する |
 | メイン処理内で `if` を重ねて設定解決する | REJECT | オーケストレーションに詳細が漏れる |
 
-```typescript
-// REJECT - 各層がそれぞれ設定を解決
-function executeTask(options) {
-  const provider = options.provider ?? loadGlobalConfig().provider;
-  return runAgent({
-    provider,
-    stepProvider: resolveProviderForStep(options.step),
-  });
-}
+```python
+# REJECT - 各層がそれぞれ設定を解決
+def execute_task(options):
+    provider = options.provider or load_global_config().provider
+    return run_agent({
+        "provider": provider,
+        "step_provider": resolve_provider_for_step(options.step),
+    })
 
-function runAgent(options) {
-  const provider = options.provider ?? resolveProviderFromConfig();
-  return getProvider(provider).call();
-}
 
-// OK - 境界で解決し、以降は解決済みの値だけを使う
-function executeTask(options) {
-  const resolved = resolveExecutionContext(options);
-  return runAgent({
-    resolvedProvider: resolved.provider,
-    resolvedModel: resolved.model,
-  });
-}
+def run_agent(options):
+    provider = options.get("provider") or resolve_provider_from_config()
+    return get_provider(provider).call()
 
-function runAgent(options) {
-  return getProvider(options.resolvedProvider).call();
-}
+
+# OK - 境界で解決し、以降は解決済みの値だけを使う
+def execute_task(options):
+    resolved = resolve_execution_context(options)
+    return run_agent({
+        "resolved_provider": resolved.provider,
+        "resolved_model": resolved.model,
+    })
+
+
+def run_agent(options):
+    return get_provider(options["resolved_provider"]).call()
 ```
 
 判断基準:
@@ -133,30 +130,30 @@ function runAgent(options) {
 |---------|------|------|
 | `RawOptions -> ResolvedOptions -> ExecutionContext` の順で段階を分ける | OK | 各段階の責務が明確 |
 | ループ前に入力をまとめて正規化する | OK | 各反復が同じ前提で動く |
-| ループ内で毎回 `options ?? config ?? env` を解決する | REJECT | 各反復の前提が揺れる |
+| ループ内で毎回 `options or config or env` を解決する | REJECT | 各反復の前提が揺れる |
 | 反復ごとに入力解釈と実行ロジックが混在する | REJECT | 処理の意図が読めない |
 | 1件ずつ「入力→解釈→実行→出力」を繰り返すしかない場合でも、解釈処理を専用メソッドに隔離する | OK | 最低限の責務分離を保てる |
 
-```typescript
-// REJECT - ループ内で毎回入力を解釈
-for (const step of steps) {
-  const provider = options.provider
-    ?? step.provider
-    ?? projectConfig.provider
-    ?? globalConfig.provider;
-  const result = await executeStep(step, { provider });
-  printResult(result);
-}
+```python
+# REJECT - ループ内で毎回入力を解釈
+for step in steps:
+    provider = (
+        options.provider
+        or step.provider
+        or project_config.provider
+        or global_config.provider
+    )
+    result = execute_step(step, {"provider": provider})
+    print_result(result)
 
-// OK - 先に解決し、ループ内は実行だけ
-const context = resolveExecutionContext(rawOptions, steps);
+# OK - 先に解決し、ループ内は実行だけ
+context = resolve_execution_context(raw_options, steps)
 
-for (const step of context.steps) {
-  const result = await executeStep(step, {
-    resolvedProvider: step.resolvedProvider,
-  });
-  printResult(result);
-}
+for step in context.steps:
+    result = execute_step(step, {
+        "resolved_provider": step.resolved_provider,
+    })
+    print_result(result)
 ```
 
 判断基準:
@@ -173,15 +170,18 @@ for (const step of context.steps) {
 - 今後も分岐が増えそうか → Strategy/Mapパターンを使う
 - 型で分岐しているか → ポリモーフィズムで置換
 
-```typescript
-// ❌ 条件分岐を増やす
-if (type === 'A') { ... }
-else if (type === 'B') { ... }
-else if (type === 'C') { ... }  // また増えた
+```python
+# ❌ 条件分岐を増やす
+if kind == "A":
+    ...
+elif kind == "B":
+    ...
+elif kind == "C":
+    ...  # また増えた
 
-// ✅ Mapで抽象化
-const handlers = { A: handleA, B: handleB, C: handleC };
-handlers[type]?.();
+# ✅ dictで抽象化
+handlers = {"A": handle_a, "B": handle_b, "C": handle_c}
+handlers[kind]()
 ```
 
 ### 抽象化しすぎない
@@ -197,75 +197,65 @@ handlers[type]?.();
 | Strategy が業務概念に名前を与え、複数実装の差し替え点を明確にしている | OK |
 | 分岐名がドメイン概念として読める | OK |
 
-```typescript
-// ❌ 過剰抽象化 - 何が起きるかを設定配列とループの両方から読む必要がある
-const operations = [
-  { kind: 'create', normalize: ['owner'], remove: [] },
-  { kind: 'revise', normalize: ['owner'], remove: ['legacyOwner'] },
+```python
+# ❌ 過剰抽象化 - 何が起きるかを設定配列とループの両方から読む必要がある
+operations = [
+    {"kind": "create", "normalize": ["owner"], "remove": []},
+    {"kind": "revise", "normalize": ["owner"], "remove": ["legacy_owner"]},
 ]
-for (const operation of operations) {
-  applyOperation(record, operation)
-}
+for operation in operations:
+    apply_operation(record, operation)
 
-// ✅ 分岐ごとの意味が重要なら明示する
-switch (record.kind) {
-  case 'create':
-    normalizeOwner(record)
-    break
-  case 'revise':
-    removeLegacyOwner(record)
-    normalizeOwner(record)
-    break
-}
+# ✅ 分岐ごとの意味が重要なら明示する
+if record.kind == "create":
+    normalize_owner(record)
+elif record.kind == "revise":
+    remove_legacy_owner(record)
+    normalize_owner(record)
 ```
 
 ### 抽象度を揃える
 
 1つの関数内では同じ粒度の処理を並べる。詳細な処理は別関数に切り出す。「何をするか」と「どうやるか」を混ぜない。
 
-```typescript
-// ❌ 抽象度が混在
-function processOrder(order) {
-  validateOrder(order);           // 高レベル
-  const conn = pool.getConnection(); // 低レベル詳細
-  conn.query('INSERT...');        // 低レベル詳細
-}
+```python
+# ❌ 抽象度が混在
+def process_order(order):
+    validate_order(order)           # 高レベル
+    conn = pool.get_connection()    # 低レベル詳細
+    conn.execute("INSERT ...")      # 低レベル詳細
 
-// ✅ 抽象度を揃える
-function processOrder(order) {
-  validateOrder(order);
-  saveOrder(order);  // 詳細は隠蔽
-}
+# ✅ 抽象度を揃える
+def process_order(order):
+    validate_order(order)
+    save_order(order)  # 詳細は隠蔽
 ```
 
 オーケストレーション関数（Step 1 → Step 2 → Step 3 と処理を並べる関数）では特に注意する。あるStepの内部に条件分岐が膨らんでいたら、そのStepを関数に抽出する。判定基準は分岐の数ではなく、**その分岐がその関数の抽象レベルに合っているか**。
 
-```typescript
-// ❌ オーケストレーション関数に詳細な分岐が露出
-async function executePipeline(options) {
-  const task = resolveTask(options);      // Step 1: 高レベル ✅
+```python
+# ❌ オーケストレーション関数に詳細な分岐が露出
+def execute_pipeline(options):
+    task = resolve_task(options)      # Step 1: 高レベル ✅
 
-  // Step 2: 低レベル詳細が露出 ❌
-  let execCwd = cwd;
-  if (options.createWorktree) {
-    const result = await confirmAndCreateWorktree(cwd, task, true);
-    execCwd = result.execCwd;
-    branch = result.branch;
-  } else if (!options.skipGit) {
-    baseBranch = getCurrentBranch(cwd);
-    branch = generateBranchName(config, options.issueNumber);
-    createBranch(cwd, branch);
-  }
+    # Step 2: 低レベル詳細が露出 ❌
+    exec_cwd = cwd
+    if options.create_worktree:
+        result = confirm_and_create_worktree(cwd, task, True)
+        exec_cwd = result.exec_cwd
+        branch = result.branch
+    elif not options.skip_git:
+        base_branch = get_current_branch(cwd)
+        branch = generate_branch_name(config, options.issue_number)
+        create_branch(cwd, branch)
 
-  await executeTask({ cwd: execCwd, ... }); // Step 3: 高レベル ✅
-}
+    execute_task({"cwd": exec_cwd, ...})  # Step 3: 高レベル ✅
 
-// ✅ 詳細を関数に抽出し、抽象度を揃える
-async function executePipeline(options) {
-  const task = resolveTask(options);
-  const ctx = await resolveExecutionContext(options);
-  await executeTask({ cwd: ctx.execCwd, ... });
-}
+# ✅ 詳細を関数に抽出し、抽象度を揃える
+def execute_pipeline(options):
+    task = resolve_task(options)
+    ctx = resolve_execution_context(options)
+    execute_task({"cwd": ctx.exec_cwd, ...})
 ```
 
 ### 言語・フレームワークの作法に従う
@@ -285,37 +275,38 @@ async function executePipeline(options) {
 | 構成と実行の分離 | 「何を使うか」はセットアップ時に決定し、実行APIはシンプルに保つ |
 | メソッド増殖の禁止 | 同じことをする複数メソッドは構成の違いで吸収する |
 
-```typescript
-// ❌ メソッド増殖 — 構成の違いを呼び出し側に押し付けている
-interface NotificationService {
-  sendEmail(to, subject, body)
-  sendSMS(to, message)
-  sendPush(to, title, body)
-  sendSlack(channel, message)
-}
+```python
+# ❌ メソッド増殖 — 構成の違いを呼び出し側に押し付けている
+class NotificationService:
+    def send_email(self, to, subject, body): ...
+    def send_sms(self, to, message): ...
+    def send_push(self, to, title, body): ...
+    def send_slack(self, channel, message): ...
 
-// ✅ 構成と実行の分離
-interface NotificationService {
-  setup(config: ChannelConfig): Channel
-}
-interface Channel {
-  send(message: Message): Promise<Result>
-}
+# ✅ 構成と実行の分離
+class NotificationService:
+    def setup(self, config):
+        return Channel(config)
+
+
+class Channel:
+    def send(self, message):
+        ...
 ```
 
 ### 抽象化の漏れ
 
 特定実装が汎用層に現れたら抽象化が漏れている。汎用層はインターフェースだけを知り、分岐は実装側で吸収する。
 
-```typescript
-// ❌ 汎用層に特定実装のインポートと分岐
-import { uploadToS3 } from '../aws/s3.js'
-if (config.storage === 's3') {
-  return uploadToS3(config.bucket, file, options)
-}
+```python
+# ❌ 汎用層に特定実装のインポートと分岐
+from app.aws.s3 import upload_to_s3
 
-// ✅ 汎用層はインターフェースのみ。非対応は生成時にエラー
-const storage = createStorage(config)
+if config.storage == "s3":
+    return upload_to_s3(config.bucket, file, options)
+
+# ✅ 汎用層はインターフェースのみ。非対応は生成時にエラー
+storage = create_storage(config)
 return storage.upload(file, options)
 ```
 
@@ -390,9 +381,11 @@ TODO/FIXME、空実装、スタブ、コメントアウトされた旧実装を�
 |------|------|
 | Issue番号・外部制約・除去条件のない TODO/FIXME | REJECT |
 | 認可、バリデーション、永続化、エラー処理を TODO で先送りしている | REJECT |
-| 空実装、`return null`、`pass`、コメントアウトされた旧実装が残っている | REJECT |
+| 空実装、`return None`、`pass`、コメントアウトされた旧実装が残っている | REJECT |
 | 外部依存や既知バグにより今は実装不能で、Issue番号と除去条件が明記されている | 許容 |
 | 将来拡張のためだけの TODO | REJECT |
+
+TDDのテスト作成フェーズでは、未実装 import や失敗テストを解消するためのプロダクションコード側スタブを追加しない。期待失敗はテスト作成レポートに記録し、実装フェーズで解消する。
 
 ## 機密情報の扱い
 
@@ -408,26 +401,23 @@ TODO/FIXME、空実装、スタブ、コメントアウトされた旧実装を�
 
 ## エラーハンドリング
 
-エラーは一元管理する。各所でtry-catchしない。
+エラーは一元管理する。各所でtry-exceptしない。
 
-```typescript
-// ❌ 各所でtry-catch
-async function createUser(data) {
-  try {
-    const user = await userService.create(data)
-    return user
-  } catch (e) {
-    console.error(e)
-    throw new Error('ユーザー作成に失敗しました')
-  }
-}
+```python
+# ❌ 各所でtry-except
+def create_user(data):
+    try:
+        user = user_service.create(data)
+        return user
+    except Exception as exc:
+        logger.exception("ユーザー作成に失敗しました")
+        raise RuntimeError("ユーザー作成に失敗しました") from exc
 
-// ✅ 上位層で一元処理
-// Controller/Handler層でまとめてキャッチ
-// または @ControllerAdvice / ErrorBoundary で処理
-async function createUser(data) {
-  return await userService.create(data)  // 例外はそのまま上に投げる
-}
+# ✅ 上位層で一元処理
+# Controller/Handler層でまとめてキャッチ
+# または FastAPI の exception handler で処理
+def create_user(data):
+    return user_service.create(data)  # 例外はそのまま上に投げる
 ```
 
 ### エラー処理の配置
@@ -442,21 +432,20 @@ async function createUser(data) {
 
 変換メソッドはDTO側に持たせる。
 
-```typescript
-// ✅ Request/Response DTOに変換メソッド
-interface CreateUserRequest {
-  name: string
-  email: string
-}
+```python
+# ✅ Request/Response DTOに変換メソッド
+class CreateUserRequest(BaseModel):
+    name: str
+    email: str
 
-function toUseCaseInput(req: CreateUserRequest): CreateUserInput {
-  return { name: req.name, email: req.email }
-}
+    def to_use_case_input(self):
+        return CreateUserInput(name=self.name, email=self.email)
 
-// Controller
-const input = toUseCaseInput(request)
-const output = await useCase.execute(input)
-return UserResponse.from(output)
+
+# Controller
+input_data = request.to_use_case_input()
+output = use_case.execute(input_data)
+return UserResponse.from_output(output)
 ```
 
 変換の方向:
@@ -481,18 +470,20 @@ Request → toInput() → UseCase/Service → Output → Response.from()
 - 表面的に似ているが変更理由が異なるコード
 - 「将来使うかも」という予測に基づくもの
 
-```typescript
-// ❌ 過度な汎用化
-function formatValue(value, type, options) {
-  if (type === 'currency') { ... }
-  else if (type === 'date') { ... }
-  else if (type === 'percentage') { ... }
-}
+```python
+# ❌ 過度な汎用化
+def format_value(value, kind, options):
+    if kind == "currency":
+        ...
+    elif kind == "date":
+        ...
+    elif kind == "percentage":
+        ...
 
-// ✅ 用途別に関数を分ける
-function formatCurrency(amount: number): string { ... }
-function formatDate(date: Date): string { ... }
-function formatPercentage(value: number): string { ... }
+# ✅ 用途別に関数を分ける
+def format_currency(amount: Decimal) -> str: ...
+def format_date(value: date) -> str: ...
+def format_percentage(value: Decimal) -> str: ...
 ```
 
 ## 同一実装の別名関数（DRY 違反）
@@ -504,25 +495,22 @@ AIは同じ処理を異なる関数名で複数定義しがちである。
 | 同一実装の別名関数 | `copyFacets()` と `placeFacetFiles()` が同じ処理 | REJECT |
 | 引数シグネチャが同一で本体も同一 | 2つの関数が同じパラメータを受け取り同じ処理を行う | REJECT |
 
-```typescript
-// REJECT - 同じ実装が別名で存在
-function copyFiles(src: string, dest: string): void {
-  for (const f of readdirSync(src)) {
-    copyFileSync(join(src, f), join(dest, f));
-  }
-}
-function placeFiles(src: string, dest: string): void {
-  for (const f of readdirSync(src)) {
-    copyFileSync(join(src, f), join(dest, f));
-  }
-}
+```python
+# REJECT - 同じ実装が別名で存在
+def copy_files(src: Path, dest: Path) -> None:
+    for file in src.iterdir():
+        shutil.copy2(file, dest / file.name)
 
-// OK - 1つの関数にまとめる
-function copyFiles(src: string, dest: string): void {
-  for (const f of readdirSync(src)) {
-    copyFileSync(join(src, f), join(dest, f));
-  }
-}
+
+def place_files(src: Path, dest: Path) -> None:
+    for file in src.iterdir():
+        shutil.copy2(file, dest / file.name)
+
+
+# OK - 1つの関数にまとめる
+def copy_files(src: Path, dest: Path) -> None:
+    for file in src.iterdir():
+        shutil.copy2(file, dest / file.name)
 ```
 
 検証アプローチ:
@@ -536,49 +524,55 @@ function copyFiles(src: string, dest: string): void {
 
 | パターン | 例 | 判定 |
 |---------|-----|------|
-| モジュールスコープの `/g` 正規表現を `test()` で使用 | `const RE = /x/g; if (RE.test(s)) ...` | REJECT |
-| `/g` 正規表現を `test()` と `replace()` で使い回し | `RE.test(s)` の後に `s.replace(RE, ...)` | REJECT |
+| 状態を持つ正規表現オブジェクトを共有して検索位置を変える | `RE.search(s, pos)` の `pos` を共有状態で更新 | REJECT |
+| 同じ正規表現オブジェクトに用途別の状態を持たせる | 検出用と置換用の状態を同じオブジェクトで管理 | REJECT |
 
-```typescript
-// REJECT - モジュールスコープの /g 正規表現を test() で使用
-const PATTERN = /\{\{facet:(\w+)\}\}/g;
-function hasFacetRef(text: string): boolean {
-  return PATTERN.test(text);  // lastIndex が進み、次回の呼び出しで結果が変わる
-}
+```python
+# REJECT - 検索位置を共有状態として持つ
+PATTERN = re.compile(r"\{\{facet:(\w+)\}\}")
+last_pos = 0
 
-// OK - test() には /g を付けない、または関数内で new RegExp
-const PATTERN_CHECK = /\{\{facet:(\w+)\}\}/;  // /g なし
-const PATTERN_REPLACE = /\{\{facet:(\w+)\}\}/g;  // replace 用は /g
-function hasFacetRef(text: string): boolean {
-  return PATTERN_CHECK.test(text);
-}
-function replaceFacetRefs(text: string): string {
-  return text.replace(PATTERN_REPLACE, ...);
-}
+def has_facet_ref(text: str) -> bool:
+    global last_pos
+    match = PATTERN.search(text, last_pos)
+    if match:
+        last_pos = match.end()
+    return match is not None
+
+# OK - 呼び出しごとに独立して判定し、置換も副作用なしで行う
+PATTERN_CHECK = re.compile(r"\{\{facet:(\w+)\}\}")
+PATTERN_REPLACE = re.compile(r"\{\{facet:(\w+)\}\}")
+
+def has_facet_ref(text: str) -> bool:
+    return PATTERN_CHECK.search(text) is not None
+
+
+def replace_facet_refs(text: str) -> str:
+    return PATTERN_REPLACE.sub(replace_match, text)
 ```
 
 検証アプローチ:
-1. モジュールスコープの正規表現に `/g` フラグがあるか確認
-2. `/g` 付き正規表現が `test()` で使われていないか確認
-3. 同一の正規表現が `test()` と `replace()` の両方で使われていないか確認
+1. 正規表現の検索位置や一時状態をモジュールスコープで共有していないか確認
+2. 検出と置換で用途の異なる状態を同じオブジェクトに持たせていないか確認
+3. 複数呼び出しで結果が変わらないことをテストする
 
 ## 禁止事項
 
-- **フォールバックは原則禁止** - `?? 'unknown'`、`|| 'default'`、`try-catch` で握りつぶすフォールバックを書かない。エラーは上位に伝播させる。どうしても必要な場合はコメントで理由を明記する
+- **フォールバックは原則禁止** - `or "unknown"`、`.get("key", "default")`、`try-except` で握りつぶすフォールバックを書かない。エラーは上位に伝播させる。どうしても必要な場合はコメントで理由を明記する
 - **説明コメント** - コードで意図を表現する。What/How のコメントは書かない
 - **未使用コード** - 「念のため」のコードは書かない
 - **未完成コード** - Issue番号・外部制約・除去条件のない TODO/FIXME、空実装、コメントアウト旧実装を残さない
-- **any型** - 型安全を破壊しない
-- **オブジェクト/配列の直接変更** - スプレッド演算子で新規作成
-- **console.log** - 本番コードに残さない
+- **型の無効化** - `Any` や過度に広い型で契約を曖昧にしない
+- **オブジェクト/配列の直接変更** - 既存オブジェクトを破壊せず、新しい dict/list を返す
+- **printデバッグ** - 本番コードに残さない
 - **機密情報の露出** - ハードコード、ログ、エラーレスポンス、テスト出力に機密情報を含めない
 - **契約文字列のハードコード散在** - ファイル名・設定キー名は定数で1箇所管理。リテラルの散在は禁止
-- **各所でのtry-catch** - エラーは上位層で一元処理
+- **各所でのtry-except** - エラーは上位層で一元処理
 - **後方互換・Legacy対応の自発的追加** - 明示的な指示がない限り不要
 - **内部実装のパブリック API エクスポート** - 公開するのはドメイン操作の関数・型のみ。インフラ層の関数や内部クラスをエクスポートしない
 - **リファクタリング後の旧コード残存** - 置き換えたコード・エクスポートは削除する。明示的に残すよう指示されない限り残さない
 - **安全機構を迂回するワークアラウンド** - 根本修正が正しいなら追加の迂回は不要
-- **プロジェクトスクリプトを迂回するツール直接実行** - `npx tool` 等の直接実行は lockfile を迂回しバージョン不一致を起こす。プロジェクトが定義したスクリプト（npm scripts, Makefile 等）を探して使う。見つからない場合のみ直接実行を検討する
-- **配線忘れ** - 新しいパラメータやフィールドを追加したら、呼び出しチェーン全体を検索して確認する。呼び出し元が値を渡していないと `options.xxx ?? fallback` で常にフォールバックが使われる
-- **冗長な条件分岐** - if/else で同一関数を呼び出し引数の差異のみの場合、三項演算子やスプレッド構文で統一する
+- **プロジェクトスクリプトを迂回するツール直接実行** - 直接実行は lockfile や requirements を迂回しバージョン不一致を起こす。プロジェクトが定義したスクリプト（Makefile、pytest 設定、package scripts 等）を探して使う。見つからない場合のみ直接実行を検討する
+- **配線忘れ** - 新しいパラメータやフィールドを追加したら、呼び出しチェーン全体を検索して確認する。呼び出し元が値を渡していないと `options.xxx or fallback` で常にフォールバックが使われる
+- **冗長な条件分岐** - if/else で同一関数を呼び出し引数の差異のみの場合、先に引数を組み立てて呼び出しを1箇所にする
 - **コピペパターン** - 新しいコードを書く前に同種の既存実装を検索し、既存パターンに合わせる。独自の書き方を持ち込まない

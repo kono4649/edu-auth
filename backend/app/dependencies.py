@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from typing import List, Optional
 
 from fastapi import Depends, Header, HTTPException, status
@@ -13,10 +14,16 @@ ROLES_HEADER = "X-Roles"
 SCOPE_HEADER = "X-Scope"
 
 
-def _parse_csv_header(value: Optional[str]) -> List[str]:
+def parse_csv_header(value: Optional[str]) -> List[str]:
     if value is None:
         return []
     return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def parse_scope_header(value: Optional[str]) -> List[str]:
+    if value is None:
+        return []
+    return value.split()
 
 
 def get_current_user(
@@ -30,14 +37,20 @@ def get_current_user(
     return x_user_id
 
 
-def get_current_active_user(current_user_id: str = Depends(get_current_user)) -> str:
-    return current_user_id
+def parse_gateway_user_uuid(user_id: str) -> uuid.UUID:
+    try:
+        return uuid.UUID(user_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Gateway ユーザーIDが UUID ではありません",
+        ) from exc
 
 
 def get_current_roles(
     x_roles: Optional[str] = Header(default=None, alias=ROLES_HEADER),
 ) -> List[str]:
-    return _parse_csv_header(x_roles)
+    return parse_csv_header(x_roles)
 
 
 def require_admin(

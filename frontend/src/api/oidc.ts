@@ -109,12 +109,13 @@ export const oidcClient = {
 
     const expectedState = sessionStorage.getItem(OIDC_STATE_KEY)
     const codeVerifier = sessionStorage.getItem(PKCE_VERIFIER_KEY)
-    sessionStorage.removeItem(OIDC_STATE_KEY)
-    sessionStorage.removeItem(PKCE_VERIFIER_KEY)
 
     if (state !== expectedState || !codeVerifier) {
       throw new Error('OIDC state or PKCE verifier is invalid')
     }
+
+    sessionStorage.removeItem(OIDC_STATE_KEY)
+    sessionStorage.removeItem(PKCE_VERIFIER_KEY)
 
     const body = new URLSearchParams()
     body.set('grant_type', 'authorization_code')

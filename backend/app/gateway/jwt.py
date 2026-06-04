@@ -2,16 +2,29 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+from typing import Callable
+
 from fastapi import HTTPException, status
 from jose import JWTError, jwk, jwt
 
 
 class JWKSJWTVerifier:
-    def __init__(self, jwks_client, issuer: str, audience: str):
+    def __init__(
+        self,
+        jwks_client,
+        issuer: str,
+        audience: str,
+        cache_ttl_seconds: int = 300,
+        now: Callable[[], datetime] | None = None,
+    ):
         self._jwks_client = jwks_client
         self._issuer = issuer
         self._audience = audience
         self._keys_by_kid: dict[str, dict] = {}
+        self._cache_expires_at: datetime | None = None
+        self._cache_ttl = timedelta(seconds=cache_ttl_seconds)
+        self._now = now or (lambda: datetime.now(timezone.utc))
 
     def verify_access_token(self, token: str) -> dict:
         try:
@@ -44,14 +57,21 @@ class JWKSJWTVerifier:
         return claims
 
     def _get_key(self, kid: str) -> dict:
-        if kid not in self._keys_by_kid:
-            jwks = self._jwks_client.fetch()
-            self._keys_by_kid.update(
-                {key["kid"]: key for key in jwks.get("keys", []) if "kid" in key}
-            )
+        if self._cache_is_expired() or kid not in self._keys_by_kid:
+            self._refresh_keys()
         if kid not in self._keys_by_kid:
             raise self._unauthorized()
         return self._keys_by_kid[kid]
+
+    def _cache_is_expired(self) -> bool:
+        return self._cache_expires_at is None or self._now() >= self._cache_expires_at
+
+    def _refresh_keys(self) -> None:
+        jwks = self._jwks_client.fetch()
+        refreshed_keys = {key["kid"]: key for key in jwks.get("keys", []) if "kid" in key}
+        if refreshed_keys:
+            self._keys_by_kid = refreshed_keys
+        self._cache_expires_at = self._now() + self._cache_ttl
 
     def _unauthorized(self) -> HTTPException:
         return HTTPException(

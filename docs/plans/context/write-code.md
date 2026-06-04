@@ -15,9 +15,11 @@
 
 # 指示
 
-./instructions/implement.md
+./instruction/write-tests-first.md
+./instruction/implement.md
 
 # 出力形式
 
 ./output_contracts/coder-decisions.md
 ./output_contracts/coder-scope.md
+./output_contracts/test-report.md

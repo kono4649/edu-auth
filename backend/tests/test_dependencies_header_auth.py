@@ -83,3 +83,9 @@ def test_require_admin_allows_admin_among_multiple_roles(user_id):
     )
 
     assert response.status_code == 200
+
+
+def test_get_current_active_user_dependency_has_been_removed():
+    import app.dependencies as dependencies
+
+    assert not hasattr(dependencies, "get_current_active_user")

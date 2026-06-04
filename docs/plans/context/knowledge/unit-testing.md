@@ -17,17 +17,18 @@
 - 「モックが多すぎる」はテスト対象の設計の問題を示唆する
 - 純粋関数は依存がないのでモック不要
 
-```typescript
-// NG - 内部実装をモック（振る舞いではなく実装を検証している）
-vi.spyOn(service, 'privateMethod')
-service.execute()
-expect(service.privateMethod).toHaveBeenCalled()
+```python
+# NG - 内部実装をモック（振る舞いではなく実装を検証している）
+with patch.object(service, "_private_method") as private_method:
+    service.execute()
+    private_method.assert_called_once()
 
-// OK - 外部依存をモックし、振る舞いを検証
-const repository = { findById: vi.fn().mockResolvedValue(user) }
-const service = new UserService(repository)
-const result = await service.getUser('id')
-expect(result).toEqual(user)
+# OK - 外部依存をモックし、振る舞いを検証
+repository = Mock()
+repository.find_by_id.return_value = user
+service = UserService(repository)
+result = service.get_user("id")
+assert result == user
 ```
 
 ## 境界値分析
@@ -39,19 +40,18 @@ expect(result).toEqual(user)
 | 同値分割 | 入力を等価なグループに分け、各グループから1つずつテスト |
 | 境界値分析 | 同値クラスの境界でテスト（境界、境界±1） |
 
-```typescript
-// NG - 正常系のみ
-test('validates age', () => {
-  expect(validateAge(25)).toBe(true)
-})
+```python
+# NG - 正常系のみ
+def test_validates_age():
+    assert validate_age(25) is True
 
-// OK - 境界値を含む
-test('validates age at boundaries', () => {
-  expect(validateAge(0)).toBe(true)    // 下限
-  expect(validateAge(-1)).toBe(false)  // 下限-1
-  expect(validateAge(150)).toBe(true)  // 上限
-  expect(validateAge(151)).toBe(false) // 上限+1
-})
+
+# OK - 境界値を含む
+def test_validates_age_at_boundaries():
+    assert validate_age(0) is True      # 下限
+    assert validate_age(-1) is False    # 下限-1
+    assert validate_age(150) is True    # 上限
+    assert validate_age(151) is False   # 上限+1
 ```
 
 ## テストフィクスチャ設計
@@ -62,23 +62,32 @@ test('validates age at boundaries', () => {
 - テストに無関係なフィールドはデフォルト値で埋める
 - 共有フィクスチャを変更して使い回さない（テスト間の独立性を保つ）
 
-```typescript
-// NG - 全フィールドを毎回定義
-const user = { id: '1', name: 'test', email: 'test@example.com', role: 'admin', createdAt: new Date() }
+```python
+# NG - 全フィールドを毎回定義
+user = {
+    "id": "1",
+    "name": "test",
+    "email": "test@example.com",
+    "role": "admin",
+    "created_at": datetime.now(timezone.utc),
+}
 
-// OK - ファクトリ関数で必要最小限
-const createUser = (overrides: Partial<User> = {}): User => ({
-  id: 'test-id',
-  name: 'test-user',
-  email: 'test@example.com',
-  role: 'user',
-  ...overrides,
-})
 
-test('admin can delete', () => {
-  const admin = createUser({ role: 'admin' })
-  // テストに関係するフィールドだけ明示
-})
+# OK - ファクトリ関数で必要最小限
+def create_user(**overrides):
+    data = {
+        "id": "test-id",
+        "name": "test-user",
+        "email": "test@example.com",
+        "role": "user",
+    }
+    data.update(overrides)
+    return data
+
+
+def test_admin_can_delete():
+    admin = create_user(role="admin")
+    # テストに関係するフィールドだけ明示
 ```
 
 ## テスト対象の分離
@@ -93,16 +102,21 @@ test('admin can delete', () => {
 | 関数引数 | 関数の依存を引数で受け取る |
 | モジュール差し替え | テスト時にモジュール全体を差し替える |
 
-```typescript
-// NG - 直接依存を生成（テストでモック不可）
-class OrderService {
-  private repo = new OrderRepository()
-  async create(order: Order) { return this.repo.save(order) }
-}
+```python
+# NG - 直接依存を生成（テストでモック不可）
+class OrderService:
+    def __init__(self):
+        self.repo = OrderRepository()
 
-// OK - コンストラクタ注入（テストでモック可能）
-class OrderService {
-  constructor(private readonly repo: OrderRepository) {}
-  async create(order: Order) { return this.repo.save(order) }
-}
+    def create(self, order):
+        return self.repo.save(order)
+
+
+# OK - コンストラクタ注入（テストでモック可能）
+class OrderService:
+    def __init__(self, repo):
+        self.repo = repo
+
+    def create(self, order):
+        return self.repo.save(order)
 ```

@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+import math
 from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import HTTPException, status
 
 REVOKED_TOKEN_KEY_PREFIX = "revoked:"
-RefreshToken = None
 
 
 class RedisTokenRevocationStore:
@@ -27,14 +27,21 @@ class RedisTokenRevocationStore:
         if current_time is None:
             current_time = datetime.now(timezone.utc)
 
-        ttl = int((expires_at - current_time).total_seconds())
-        if ttl <= 0:
+        remaining_seconds = (_as_utc(expires_at) - _as_utc(current_time)).total_seconds()
+        if remaining_seconds <= 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="期限切れトークンは失効登録できません",
             )
 
+        ttl = math.ceil(remaining_seconds)
         self._redis.set(self._key(jti), "1", ex=ttl)
 
     def _key(self, jti: str) -> str:
         return f"{REVOKED_TOKEN_KEY_PREFIX}{jti}"
+
+
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)

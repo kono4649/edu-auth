@@ -20,7 +20,7 @@
 | 新しい振る舞い | テスト必須。テストがなければ REJECT |
 | バグ修正 | リグレッションテスト必須。テストがなければ REJECT |
 | 振る舞いの変更 | テストの更新必須。更新がなければ REJECT |
-| ビルド（型チェック） | ビルド成功必須。失敗は REJECT |
+| ビルド/静的検証 | プロジェクト定義の静的検証成功必須。Python では最低限 `python -m compileall` を実行し、失敗は REJECT |
 | エッジケース・境界値 | テスト推奨（Warning） |
 
 ## テスト優先度
@@ -52,17 +52,16 @@
 
 ## テスト構造: Given-When-Then
 
-```typescript
-test('ユーザーが存在しない場合、NotFoundエラーを返す', async () => {
-  // Given: 存在しないユーザーID
-  const nonExistentId = 'non-existent-id'
+```python
+def test_should_return_not_found_when_user_does_not_exist():
+    # Given: 存在しないユーザーID
+    non_existent_id = "non-existent-id"
 
-  // When: ユーザー取得を試みる
-  const result = await getUser(nonExistentId)
+    # When: ユーザー取得を試みる
+    result = get_user(non_existent_id)
 
-  // Then: NotFoundエラーが返る
-  expect(result.error).toBe('NOT_FOUND')
-})
+    # Then: NotFoundエラーが返る
+    assert result.error == "NOT_FOUND"
 ```
 
 ## テスト品質
@@ -70,7 +69,7 @@ test('ユーザーが存在しない場合、NotFoundエラーを返す', async 
 | 観点 | 良い | 悪い |
 |------|------|------|
 | 独立性 | 他のテストに依存しない | 実行順序に依存 |
-| 型安全 | コードはビルド（型チェック）が通ること |
+| 静的検証 | コードはプロジェクト定義の静的検証が通ること |
 | 再現性 | 毎回同じ結果 | 時間やランダム性に依存 |
 | 明確性 | 失敗時に原因が分かる | 失敗しても原因不明 |
 | 焦点 | 1テスト1概念 | 複数の関心事が混在 |
@@ -178,11 +177,14 @@ E2E は、利用者が実際に入る起点から設計する。ドキュメン�
 | 整合性 | テスト設定内の関連する値は互いに矛盾しない |
 | プロセス終了保証 | テストランナーにタイムアウトと強制終了を設定し、プロセスリークを防ぐ |
 
-```typescript
-// ❌ ハードコードされた前提 — 別のバックエンドでテストすると不整合になる
-writeConfig({ backend: 'postgres', connectionPool: 10 })
+```python
+# ❌ ハードコードされた前提 — 別のバックエンドでテストすると不整合になる
+write_config({"backend": "postgres", "connection_pool": 10})
 
-// ✅ パラメータに連動
-const backend = process.env.TEST_BACKEND ?? 'postgres'
-writeConfig({ backend, connectionPool: backend === 'sqlite' ? 1 : 10 })
+# ✅ パラメータに連動
+backend = os.environ.get("TEST_BACKEND", "postgres")
+write_config({
+    "backend": backend,
+    "connection_pool": 1 if backend == "sqlite" else 10,
+})
 ```

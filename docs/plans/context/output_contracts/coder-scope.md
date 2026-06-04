@@ -7,8 +7,8 @@
 ## 変更予定
 | 種別 | ファイル |
 |------|---------|
-| 作成 | `src/example.ts` |
-| 変更 | `src/routes.ts` |
+| 作成 | `backend/app/example.py` |
+| 変更 | `backend/app/routers/routes.py` |
 
 ## 推定規模
 Small / Medium / Large

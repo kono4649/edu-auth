@@ -56,6 +56,26 @@ def test_payments_write_requires_scope(policy):
     assert decision.status_code == 403
 
 
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("DELETE", "/api/payments/123"),
+        ("POST", "/api/payments/refund"),
+    ],
+)
+def test_payment_subpaths_require_payment_write_scope(policy, method, path):
+    decision = policy.authorize(
+        method,
+        path,
+        user_id="user-uuid",
+        roles=["user"],
+        scopes=["openid", "profile"],
+    )
+
+    assert decision.allowed is False
+    assert decision.status_code == 403
+
+
 def test_payments_write_scope_allows_payment_creation(policy):
     decision = policy.authorize(
         "POST",

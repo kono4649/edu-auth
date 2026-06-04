@@ -97,3 +97,50 @@ def test_jwks_is_cached_for_second_token_with_same_kid(jwks, make_rs256_token):
     verifier.verify_access_token(make_rs256_token(jti="second-token"))
 
     assert jwks_client.fetch_count == 1
+
+
+def test_jwks_cache_refreshes_after_ttl_and_rejects_removed_kid(jwks, make_rs256_token):
+    from app.gateway.jwt import JWKSJWTVerifier
+
+    current_time = datetime(2026, 6, 4, tzinfo=timezone.utc)
+    jwks_client = CountingJWKSClient(jwks)
+    verifier = JWKSJWTVerifier(
+        jwks_client=jwks_client,
+        issuer="https://idp.example.com",
+        audience="api-gateway",
+        cache_ttl_seconds=60,
+        now=lambda: current_time,
+    )
+
+    verifier.verify_access_token(make_rs256_token(jti="before-rotation"))
+    jwks_client.jwks = {"keys": [{**jwks["keys"][0], "kid": "rotated-key"}]}
+    current_time = current_time + timedelta(seconds=61)
+
+    with pytest.raises(Exception) as exc_info:
+        verifier.verify_access_token(make_rs256_token(jti="after-rotation"))
+
+    assert getattr(exc_info.value, "status_code", None) == 401
+    assert jwks_client.fetch_count == 2
+
+
+def test_jwks_empty_refresh_keeps_existing_cache_until_next_ttl(jwks, make_rs256_token):
+    from app.gateway.jwt import JWKSJWTVerifier
+
+    current_time = datetime(2026, 6, 4, tzinfo=timezone.utc)
+    jwks_client = CountingJWKSClient(jwks)
+    verifier = JWKSJWTVerifier(
+        jwks_client=jwks_client,
+        issuer="https://idp.example.com",
+        audience="api-gateway",
+        cache_ttl_seconds=60,
+        now=lambda: current_time,
+    )
+
+    verifier.verify_access_token(make_rs256_token(jti="before-empty-jwks"))
+    jwks_client.jwks = {"keys": []}
+    current_time = current_time + timedelta(seconds=61)
+
+    verifier.verify_access_token(make_rs256_token(jti="during-empty-jwks"))
+    verifier.verify_access_token(make_rs256_token(jti="cache-hit-after-empty-jwks"))
+
+    assert jwks_client.fetch_count == 2

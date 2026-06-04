@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import engine, Base
-from app.routers import products, orders, admin
+from app.routers import products, orders, admin, users
 
 # DB テーブルの自動作成（開発用）
 Base.metadata.create_all(bind=engine)
@@ -34,6 +34,7 @@ app.add_middleware(
 app.include_router(products.router)
 app.include_router(orders.router)
 app.include_router(admin.router)
+app.include_router(users.router)
 
 
 @app.get("/health")

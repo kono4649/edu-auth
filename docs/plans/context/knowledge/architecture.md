@@ -65,16 +65,16 @@
 Vertical Slice Architecture（機能単位でコードをまとめる構造）:
 
 ```
-src/
+backend/app/
 ├── features/
 │   ├── auth/
-│   │   ├── LoginCommand.ts
-│   │   ├── LoginHandler.ts
-│   │   ├── AuthRepository.ts
-│   │   └── auth.test.ts
+│   │   ├── commands.py
+│   │   ├── handlers.py
+│   │   ├── repository.py
+│   │   └── test_auth.py
 │   └── order/
-│       ├── CreateOrderCommand.ts
-│       ├── CreateOrderHandler.ts
+│       ├── commands.py
+│       ├── handlers.py
 │       └── ...
 └── shared/           # 複数featureで共有
     ├── database/
@@ -103,7 +103,7 @@ Vertical Slice の判定基準:
 
 - 読み取りと書き込みの責務が分かれているか
 - データ取得はルート（View/Controller）で行い、子に渡しているか
-- エラーハンドリングが一元化されているか（各所でtry-catch禁止）
+- エラーハンドリングが一元化されているか（各所でtry-except禁止）
 - ビジネスロジックがController/Viewに漏れていないか
 
 ## 境界での解決
@@ -116,34 +116,31 @@ Vertical Slice の判定基準:
 | オーケストレーション層が解決済みの値だけを扱う | OK |
 | 下位層が global/project/env を再読込して同じ値を再解決する | REJECT |
 | 表示用と実行用で別々の解決関数を持つ | REJECT |
-| 未解決の options を深い層まで運び、先で `??` 解決する | REJECT |
+| 未解決の options を深い層まで運び、先で `or fallback` 解決する | REJECT |
 
-```typescript
-// REJECT - 実行層が設定ソースを直接知っている
-async function executeWorkflow(options) {
-  const engine = new WorkflowEngine({
-    provider: options.provider ?? globalConfig.provider,
-  });
-}
+```python
+# REJECT - 実行層が設定ソースを直接知っている
+def execute_workflow(options):
+    engine = WorkflowEngine({
+        "provider": options.provider or global_config.provider,
+    })
 
-class AgentRunner {
-  run(step, options) {
-    const provider = options.provider ?? resolveProviderFromConfig();
-    return getProvider(provider).call();
-  }
-}
 
-// OK - 境界で解決し、内部は解決済み値を使う
-async function executeWorkflow(options) {
-  const context = resolveExecutionContext(options);
-  const engine = new WorkflowEngine(context);
-}
+class AgentRunner:
+    def run(self, step, options):
+        provider = options.provider or resolve_provider_from_config()
+        return get_provider(provider).call()
 
-class AgentRunner {
-  run(step, options) {
-    return getProvider(options.resolvedProvider).call();
-  }
-}
+
+# OK - 境界で解決し、内部は解決済み値を使う
+def execute_workflow(options):
+    context = resolve_execution_context(options)
+    engine = WorkflowEngine(context)
+
+
+class AgentRunner:
+    def run(self, step, options):
+        return get_provider(options.resolved_provider).call()
 ```
 
 ### Tell, Don't Ask
@@ -180,21 +177,22 @@ class AgentRunner {
 | 反復ごとに「入力取得→解釈→実行→出力」を1関数に詰め込む | REJECT |
 | 最適化で逐次処理が必要でも、解釈フェーズを専用メソッドに隔離している | OK |
 
-```typescript
-// REJECT - 各反復が入力解釈まで担う
-for (const item of items) {
-  const resolved = resolveItem(item, rawOptions, config);
-  const result = execute(resolved);
-  output(result);
-}
+```python
+# REJECT - 各反復が入力解釈まで担う
+for item in items:
+    resolved = resolve_item(item, raw_options, config)
+    result = execute(resolved)
+    output(result)
 
-// OK - 先に解釈し、反復は実行だけ
-const resolvedItems = items.map((item) => resolveItem(item, rawOptions, config));
+# OK - 先に解釈し、反復は実行だけ
+resolved_items = [
+    resolve_item(item, raw_options, config)
+    for item in items
+]
 
-for (const item of resolvedItems) {
-  const result = execute(item);
-  output(result);
-}
+for item in resolved_items:
+    result = execute(item)
+    output(result)
 ```
 
 逐次解釈が必要なケースでも、`nextRawInput()` と `resolveInput()` と `executeResolved()` の責務は分ける。性能要件でフェーズを近づけても、責務まで混ぜない。
@@ -209,70 +207,69 @@ for (const item of resolvedItems) {
 |------|------|
 | REJECT | コードの動作をそのまま自然言語で言い換えている |
 | REJECT | 関数名・変数名から明らかなことを繰り返している |
-| REJECT | JSDocが関数名の言い換えだけで情報を追加していない |
+| REJECT | docstring が関数名の言い換えだけで情報を追加していない |
 | OK | なぜその実装を選んだかの設計判断を説明している |
 | OK | 一見不自然に見える挙動の理由を説明している |
 | 最良 | コメントなしでコード自体が意図を語っている |
 
-```typescript
-// REJECT - コードの言い換え（What）
-// If interrupted, abort immediately
-if (status === 'interrupted') {
-  return ABORT_STEP;
-}
+```python
+# REJECT - コードの言い換え（What）
+# If interrupted, abort immediately
+if status == "interrupted":
+    return ABORT_STEP
 
-// REJECT - ループの存在を言い換えただけ
-// Check transitions in order
-for (const transition of step.transitions) {
+# REJECT - ループの存在を言い換えただけ
+# Check transitions in order
+for transition in step.transitions:
+    ...
 
-// REJECT - 関数名の繰り返し
-/** Check if status matches transition condition. */
-export function matchesCondition(status: Status, condition: TransitionCondition): boolean {
+# REJECT - 関数名の繰り返し
+def matches_condition(status, condition):
+    """Check if status matches transition condition."""
+    ...
 
-// OK - 設計判断の理由（Why）
-// ユーザー中断はワークフロー定義のトランジションより優先する
-if (status === 'interrupted') {
-  return ABORT_STEP;
-}
+# OK - 設計判断の理由（Why）
+# ユーザー中断はワークフロー定義のトランジションより優先する
+if status == "interrupted":
+    return ABORT_STEP
 
-// OK - 一見不自然な挙動の理由
-// stay はループを引き起こす可能性があるが、ユーザーが明示的に指定した場合のみ使われる
-return step.name;
+# OK - 一見不自然な挙動の理由
+# stay はループを引き起こす可能性があるが、ユーザーが明示的に指定した場合のみ使われる
+return step.name
 ```
 
 **状態の直接変更の検出基準**
 
 配列やオブジェクトの直接変更（ミューテーション）を検出する。
 
-```typescript
-// REJECT - 配列の直接変更
-const steps: Step[] = getSteps();
-steps.push(newStep);           // 元の配列を破壊
-steps.splice(index, 1);       // 元の配列を破壊
-steps[0].status = 'done';     // ネストされたオブジェクトも直接変更
+```python
+# REJECT - 配列の直接変更
+steps = get_steps()
+steps.append(new_step)              # 元の配列を破壊
+del steps[index]                    # 元の配列を破壊
+steps[0]["status"] = "done"         # ネストされたオブジェクトも直接変更
 
-// OK - イミュータブルな操作
-const withNew = [...steps, newStep];
-const without = steps.filter((_, i) => i !== index);
-const updated = steps.map((s, i) =>
-  i === 0 ? { ...s, status: 'done' } : s
-);
+# OK - 新しいリストを返す
+with_new = [*steps, new_step]
+without = [step for i, step in enumerate(steps) if i != index]
+updated = [
+    {**step, "status": "done"} if i == 0 else step
+    for i, step in enumerate(steps)
+]
 
-// REJECT - オブジェクトの直接変更
-function updateConfig(config: Config) {
-  config.logLevel = 'debug';   // 引数を直接変更
-  config.steps.push(newStep);  // ネストも直接変更
-  return config;
-}
+# REJECT - オブジェクトの直接変更
+def update_config(config):
+    config["log_level"] = "debug"       # 引数を直接変更
+    config["steps"].append(new_step)    # ネストも直接変更
+    return config
 
-// OK - 新しいオブジェクトを返す
-function updateConfig(config: Config): Config {
-  return {
-    ...config,
-    logLevel: 'debug',
-    steps: [...config.steps, newStep],
-  };
-}
+# OK - 新しいオブジェクトを返す
+def update_config(config):
+    return {
+        **config,
+        "log_level": "debug",
+        "steps": [*config["steps"], new_step],
+    }
 ```
 
 ## セキュリティ（基本チェック）
@@ -323,42 +320,42 @@ function updateConfig(config: Config): Config {
 
 **良い抽象化の例**
 
-```typescript
-// 条件分岐の肥大化
-function process(type: string) {
-  if (type === 'A') { /* 処理A */ }
-  else if (type === 'B') { /* 処理B */ }
-  else if (type === 'C') { /* 処理C */ }
-  // ...続く
+```python
+# 条件分岐の肥大化
+def process(kind: str):
+    if kind == "A":
+        process_a()
+    elif kind == "B":
+        process_b()
+    elif kind == "C":
+        process_c()
+    # ...続く
+
+# dictパターンで抽象化
+processors = {
+    "A": process_a,
+    "B": process_b,
+    "C": process_c,
 }
 
-// Mapパターンで抽象化
-const processors: Record<string, () => void> = {
-  A: processA,
-  B: processB,
-  C: processC,
-};
-function process(type: string) {
-  processors[type]?.();
-}
+def process(kind: str):
+    processors[kind]()
 ```
 
-```typescript
-// 抽象度の混在
-function createUser(data: UserData) {
-  // 高レベル: ビジネスロジック
-  validateUser(data);
-  // 低レベル: DB操作の詳細
-  const conn = await pool.getConnection();
-  await conn.query('INSERT INTO users...');
-  conn.release();
-}
+```python
+# 抽象度の混在
+def create_user(data):
+    # 高レベル: ビジネスロジック
+    validate_user(data)
+    # 低レベル: DB操作の詳細
+    conn = pool.get_connection()
+    conn.execute("INSERT INTO users ...")
+    conn.close()
 
-// 抽象度を揃える
-function createUser(data: UserData) {
-  validateUser(data);
-  await userRepository.save(data);  // 詳細は隠蔽
-}
+# 抽象度を揃える
+def create_user(data):
+    validate_user(data)
+    user_repository.save(data)  # 詳細は隠蔽
 ```
 
 ## その場しのぎの検出
@@ -369,7 +366,7 @@ function createUser(data: UserData) {
 |---------|-----|
 | 不要なパッケージ追加 | 動かすためだけに入れた謎のライブラリ |
 | テストの削除・スキップ | `@Disabled`、`.skip()`、コメントアウト |
-| 空実装・スタブ放置 | `return null`、`// TODO: implement`、`pass` |
+| 空実装・スタブ放置 | `return None`、`# TODO: implement`、`pass` |
 | モックデータの本番混入 | ハードコードされたダミーデータ |
 | エラー握りつぶし | 空の `catch {}`、`rescue nil` |
 | マジックナンバー | 説明なしの `if (status == 3)` |
@@ -380,22 +377,19 @@ function createUser(data: UserData) {
 
 Issue番号・外部制約・除去条件のない TODO/FIXME は REJECT。
 
-```kotlin
-// REJECT - 認可チェックをTODOで先送り
-// TODO: 施設IDによる認可チェックを追加
-fun deleteCustomHoliday(@PathVariable id: String) {
-    deleteCustomHolidayInputPort.execute(input)
-}
+```python
+# REJECT - 認可チェックをTODOで先送り
+# TODO: 施設IDによる認可チェックを追加
+def delete_custom_holiday(holiday_id: str):
+    delete_custom_holiday_input_port.execute(input_data)
 
-// APPROVE - 今実装する
-fun deleteCustomHoliday(@PathVariable id: String) {
-    val currentUserFacilityId = getCurrentUserFacilityId()
-    val holiday = findHolidayById(id)
-    require(holiday.facilityId == currentUserFacilityId) {
-        "Cannot delete holiday from another facility"
-    }
-    deleteCustomHolidayInputPort.execute(input)
-}
+# APPROVE - 今実装する
+def delete_custom_holiday(holiday_id: str):
+    current_user_facility_id = get_current_user_facility_id()
+    holiday = find_holiday_by_id(holiday_id)
+    if holiday.facility_id != current_user_facility_id:
+        raise PermissionError("Cannot delete holiday from another facility")
+    delete_custom_holiday_input_port.execute(input_data)
 ```
 
 TODO/FIXMEが許容されるケース:
@@ -436,7 +430,7 @@ DRY にしないケース:
 | 対象 | 確認内容 |
 |------|---------|
 | CLAUDE.md / README.md | スキーマ定義、設計原則、制約に従っているか |
-| 型定義・Zodスキーマ | 新しいフィールドがスキーマに反映されているか |
+| 型定義・Pydanticスキーマ | 新しいフィールドがスキーマに反映されているか |
 | YAML/JSON設定ファイル | 文書化されたフォーマットに従っているか |
 
 具体的なチェック:
@@ -463,28 +457,26 @@ DRY にしないケース:
 契約変更の配線漏れはコーディングポリシーに従う。アーキテクチャレビューでは、新しいパラメータ・フィールドが変更ファイル内だけで完結しておらず、実際の呼び出し元・生成元・読み取り側まで届いているかを見る。
 
 検証手順:
-1. 新しいオプショナルパラメータや interface フィールドを見つけたら、全呼び出し元を検索
+1. 新しいオプショナルパラメータやスキーマフィールドを見つけたら、全呼び出し元を検索
 2. 全呼び出し元が新しいパラメータを渡しているか確認
-3. フォールバック値（`?? default`）がある場合、フォールバックが使われるケースが意図通りか確認
+3. フォールバック値（`or default`、`.get(..., default)`）がある場合、フォールバックが使われるケースが意図通りか確認
 
 危険パターン:
 
 | パターン | 問題 | 検出方法 |
 |---------|------|---------|
-| `options.xxx ?? fallback` で全呼び出し元が `xxx` を省略 | 機能が実装されているのに常にフォールバック | 呼び出し元を確認 |
+| `options.xxx or fallback` で全呼び出し元が `xxx` を省略 | 機能が実装されているのに常にフォールバック | 呼び出し元を確認 |
 | テストがモックで直接値をセット | 実際の呼び出しチェーンを経由しない | テストの構築方法を確認 |
 | `executeXxx()` が内部で使う `options` を引数で受け取らない | 上位から値を渡す口がない | 関数シグネチャを確認 |
 
-```typescript
-// 配線漏れ: projectCwd を受け取る口がない
-export async function executeWorkflow(config, cwd, task) {
-  const engine = new WorkflowEngine(config, cwd, task);  // options なし
-}
+```python
+# 配線漏れ: project_cwd を受け取る口がない
+def execute_workflow(config, cwd, task):
+    engine = WorkflowEngine(config, cwd, task)  # options なし
 
-// 配線済み: projectCwd を渡せる
-export async function executeWorkflow(config, cwd, task, options?) {
-  const engine = new WorkflowEngine(config, cwd, task, options);
-}
+# 配線済み: project_cwd を渡せる
+def execute_workflow(config, cwd, task, options=None):
+    engine = WorkflowEngine(config, cwd, task, options)
 ```
 
 呼び出し元の制約による論理的デッドコード:
@@ -495,7 +487,7 @@ export async function executeWorkflow(config, cwd, task, options?) {
 |---------|------|---------|
 | 呼び出し元がTTY必須なのに関数内でTTYチェック | 到達しない分岐が残る | 全呼び出し元の前提条件を確認 |
 | 呼び出し元がnullチェック済みなのに再度nullガード | 冗長な防御 | 呼び出し元の制約を追跡 |
-| 呼び出し元が型で制約しているのにランタイムチェック | 型安全を信頼していない | TypeScriptの型制約を確認 |
+| 呼び出し元がスキーマや型で制約しているのにランタイムチェック | 入力契約を信頼していない | Pydantic モデルや型制約を確認 |
 
 検証手順:
 1. 防御的な条件分岐（TTYチェック、nullガード等）を見つけたら、全呼び出し元を確認

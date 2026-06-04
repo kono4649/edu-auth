@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import require_admin
+from app.dependencies import parse_gateway_user_uuid, require_admin
 from app.models import User
 from app.schemas import UserResponse, UserRoleUpdate
 
@@ -36,7 +36,7 @@ def update_user_role(
     管理者が一般ユーザーに管理者権限を付与、または剥奪できる。
     自分自身のロール変更は禁止（誤って管理者を失わないように）。
     """
-    if str(user_id) == admin_user_id:
+    if user_id == parse_gateway_user_uuid(admin_user_id):
         raise HTTPException(status_code=400, detail="自分自身のロールは変更できません")
 
     user = db.query(User).filter(User.id == user_id).first()

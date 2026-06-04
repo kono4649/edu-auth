@@ -12,6 +12,35 @@
 
 ---
 
+## 対応結果
+
+**対応日:** 2026-06-04
+**ステータス:** 全10件対応済み
+
+| # | 状態 | 対応内容 |
+|---|------|----------|
+| 1 | 対応済み | `write-code.md` の参照を `./instruction/implement.md` に修正 |
+| 2 | 対応済み | `write-code.md` に `./instruction/write-tests-first.md` を登録 |
+| 3 | 対応済み | `write-code.md` に `./output_contracts/test-report.md` を登録し、TDDフェーズの必須出力として参照 |
+| 4 | 対応済み | `implement.md` のインライン出力契約テンプレートを削除し、`coder-scope.md` / `coder-decisions.md` 参照へ一本化 |
+| 5 | 対応済み | `implement.md` にTDDフェーズからの失敗テスト・未実装 import エラーの引き継ぎルールを追加 |
+| 6 | 対応済み | `coder.md` に、指摘がセキュリティ・データ破壊・要件違反を招く場合は停止して判断を仰ぐ優先ルールを追加 |
+| 7 | 対応済み | `write-tests-first.md` と `coding.md` に、TDDフェーズではプロダクションコード側スタブを追加しないことを明記 |
+| 8 | 対応済み | `unit-testing.md`、`testing.md`、`coding.md`、`architecture.md`、`e2e-testing.md` のTypeScript/Kotlin寄りコード例をPython/FastAPI向けに置換 |
+| 9 | 対応済み | `coder.md` の削除禁止ルールを「タスク内でリファクタリングして置き換えたコード」に限定し、タスク外機能削除との境界を明確化 |
+| 10 | 対応済み | `implement.md` と `testing.md` にPython向け静的検証として `python -m compileall backend/app backend/tests`、テストとして `pytest` を明記 |
+
+**追加調整:**
+- `output_contracts/coder-scope.md` のサンプルパスを `backend/app/*.py` 形式へ更新
+- マニフェスト経由で読まれるナレッジ文書内のTS/JS固有表現（`vi.fn()`、`Partial<T>`、`??`、`.ts` 例など）をPython表現へ統一
+
+**検証:**
+- `write-code.md` の相対参照先がすべて実在することを確認
+- TS/JS/Kotlin固有パターンの残存検索を実施
+- `git diff --check` 通過
+
+---
+
 ## 指摘一覧
 
 ### 🔴 CONFIRMED（確実な問題）

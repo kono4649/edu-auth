@@ -39,6 +39,36 @@ def test_logout_writes_revoked_key_with_remaining_token_ttl():
     ]
 
 
+def test_logout_accepts_timezone_naive_expiry_as_utc():
+    from app.revocation import RedisTokenRevocationStore
+
+    redis = FakeRedis()
+    store = RedisTokenRevocationStore(redis=redis)
+    now = datetime(2026, 6, 4, 12, 0, 0, tzinfo=timezone.utc)
+    exp = datetime(2026, 6, 4, 12, 2, 3)
+
+    store.revoke("unique-token-id", expires_at=exp, now=now)
+
+    assert redis.set_calls == [
+        {"key": "revoked:unique-token-id", "value": "1", "ex": 123}
+    ]
+
+
+def test_revoke_rounds_subsecond_ttl_up_to_one_second():
+    from app.revocation import RedisTokenRevocationStore
+
+    redis = FakeRedis()
+    store = RedisTokenRevocationStore(redis=redis)
+    now = datetime(2026, 6, 4, 12, 0, 0, 100000, tzinfo=timezone.utc)
+    exp = datetime(2026, 6, 4, 12, 0, 1, tzinfo=timezone.utc)
+
+    store.revoke("unique-token-id", expires_at=exp, now=now)
+
+    assert redis.set_calls == [
+        {"key": "revoked:unique-token-id", "value": "1", "ex": 1}
+    ]
+
+
 @pytest.mark.parametrize("seconds_until_expiry", [0, -30])
 def test_revoke_rejects_already_expired_token(seconds_until_expiry):
     from app.revocation import RedisTokenRevocationStore
@@ -55,18 +85,7 @@ def test_revoke_rejects_already_expired_token(seconds_until_expiry):
     assert redis.set_calls == []
 
 
-def test_revocation_store_does_not_touch_refresh_token_model(monkeypatch):
-    from app.revocation import RedisTokenRevocationStore
+def test_revocation_module_has_no_refresh_token_sentinel():
     import app.revocation as revocation
 
-    class PoisonRefreshToken:
-        def __getattribute__(self, name):
-            if name == "__class__":
-                return PoisonRefreshToken
-            raise AssertionError("RefreshToken model must not be used")
-
-    monkeypatch.setattr(revocation, "RefreshToken", PoisonRefreshToken(), raising=False)
-
-    store = RedisTokenRevocationStore(redis=FakeRedis())
-
-    assert store.ensure_not_revoked("unique-token-id") is None
+    assert not hasattr(revocation, "RefreshToken")

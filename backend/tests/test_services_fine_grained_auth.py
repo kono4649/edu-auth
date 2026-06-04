@@ -41,7 +41,7 @@ def test_order_service_requires_gateway_user_header():
 def test_product_service_allows_admin_write_operations(operation):
     from app.services.product_service.authorization import assert_product_write_allowed
 
-    assert assert_product_write_allowed(headers={"X-Roles": "admin"}, operation=operation) is None
+    assert assert_product_write_allowed(headers={"X-Roles": "user, admin"}, operation=operation) is None
 
 
 def test_product_service_denies_user_write_operations():
@@ -64,6 +64,15 @@ def test_payment_service_denies_missing_payments_write_scope():
 
     with pytest.raises(Exception) as exc_info:
         assert_payment_write_allowed(headers={"X-Scope": "openid profile"})
+
+    assert getattr(exc_info.value, "status_code", None) == 403
+
+
+def test_payment_service_rejects_comma_separated_scope_header():
+    from app.services.payment_service.authorization import assert_payment_write_allowed
+
+    with pytest.raises(Exception) as exc_info:
+        assert_payment_write_allowed(headers={"X-Scope": "openid,payments:write"})
 
     assert getattr(exc_info.value, "status_code", None) == 403
 

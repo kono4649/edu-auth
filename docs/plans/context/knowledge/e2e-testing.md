@@ -67,13 +67,19 @@ E2Eテストは非決定的な要因で失敗しやすい。
 | 環境依存 | テスト実行に必要な前提条件を明示的にセットアップする |
 | 実行順序依存 | 各テストが独立して実行できるよう、状態を初期化する |
 
-```typescript
-// NG - 固定 sleep でタイミングを合わせる
-await sleep(3000)
-expect(result).toBeDefined()
+```python
+# NG - 固定 sleep でタイミングを合わせる
+time.sleep(3)
+assert result is not None
 
-// OK - 条件ベースで待機する
-await waitFor(() => expect(result).toBeDefined(), { timeout: 5000 })
+# OK - 条件ベースで待機する
+deadline = time.monotonic() + 5
+while time.monotonic() < deadline:
+    result = fetch_result()
+    if result is not None:
+        break
+    time.sleep(0.1)
+assert result is not None
 ```
 
 ## テストケース管理
@@ -86,4 +92,3 @@ E2Eテストの網羅性を保証するため、テストケースをリスト�
 | 起点ごとに分類 | コマンド/ページ/エンドポイント単位でグループ化する |
 | 優先度付け | ユーザー影響度 × 未テストのリスクで優先度を決定する |
 | 既存テストとの突き合わせ | 新規追加前に既存テストのカバー範囲を確認する |
-

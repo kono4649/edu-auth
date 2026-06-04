@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from fastapi import HTTPException, status
 
-from app.dependencies import SCOPE_HEADER
+from app.dependencies import SCOPE_HEADER, parse_scope_header
 
 PAYMENTS_WRITE_SCOPE = "payments:write"
 
 
 def assert_payment_write_allowed(headers: dict[str, str]) -> None:
-    scopes = headers.get(SCOPE_HEADER, "").split()
+    scopes = parse_scope_header(headers.get(SCOPE_HEADER))
     if PAYMENTS_WRITE_SCOPE not in scopes:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

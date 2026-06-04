@@ -31,7 +31,7 @@ class GatewayPolicy:
         if normalized_method == "GET" and path == "/api/orders":
             return self._require_authenticated(user_id)
 
-        if normalized_method == "POST" and path == "/api/payments":
+        if self._requires_payment_write_scope(normalized_method, path):
             authn_decision = self._require_authenticated(user_id)
             if not authn_decision.allowed:
                 return authn_decision
@@ -46,6 +46,10 @@ class GatewayPolicy:
             or (method == "DELETE" and path.startswith("/api/products/"))
             or path.startswith("/api/admin/")
         )
+
+    def _requires_payment_write_scope(self, method: str, path: str) -> bool:
+        payment_path = path == "/api/payments" or path.startswith("/api/payments/")
+        return payment_path and method in {"POST", "PUT", "PATCH", "DELETE"}
 
     def _require_authenticated(self, user_id: str | None) -> PolicyDecision:
         if user_id is None:
