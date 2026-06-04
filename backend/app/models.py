@@ -1,11 +1,11 @@
-"""
-データベースモデル定義
-SQLAlchemy ORM モデル
-"""
-from datetime import datetime
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Enum, Text
-from sqlalchemy.orm import relationship
+"""データベースモデル定義。"""
+
 import enum
+import uuid
+from datetime import datetime
+
+from sqlalchemy import Boolean, Column, DateTime, Enum, Float, ForeignKey, Integer, String, Text, Uuid
+from sqlalchemy.orm import relationship
 
 from app.database import Base
 
@@ -21,38 +21,17 @@ class UserRole(str, enum.Enum):
 
 
 class User(Base):
-    """ユーザーモデル"""
+    """IdP の subject とアプリ内ビジネス属性を保持するユーザー。"""
+
     __tablename__ = "users"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
     username = Column(String, unique=True, index=True, nullable=False)
-    # hashed_password: パスワードは必ずハッシュ化して保存（平文保存は厳禁）
-    hashed_password = Column(String, nullable=False)
     role = Column(Enum(UserRole), default=UserRole.USER, nullable=False)
-    is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     orders = relationship("Order", back_populates="user")
-    refresh_tokens = relationship("RefreshToken", back_populates="user")
-
-
-class RefreshToken(Base):
-    """
-    リフレッシュトークンモデル
-    DBに保存することでトークンの無効化（ログアウト・強制失効）が可能
-    """
-    __tablename__ = "refresh_tokens"
-
-    id = Column(Integer, primary_key=True, index=True)
-    token = Column(String, unique=True, index=True, nullable=False)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    expires_at = Column(DateTime, nullable=False)
-    # revoked: ログアウト時にこのフラグをTrueにしてトークンを無効化
-    revoked = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-    user = relationship("User", back_populates="refresh_tokens")
 
 
 class Product(Base):
@@ -85,7 +64,7 @@ class Order(Base):
     __tablename__ = "orders"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(Uuid(as_uuid=True), ForeignKey("users.id"), nullable=False)
     status = Column(Enum(OrderStatus), default=OrderStatus.PENDING)
     total_amount = Column(Float, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)

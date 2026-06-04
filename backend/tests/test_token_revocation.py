@@ -61,6 +61,8 @@ def test_revocation_store_does_not_touch_refresh_token_model(monkeypatch):
 
     class PoisonRefreshToken:
         def __getattribute__(self, name):
+            if name == "__class__":
+                return PoisonRefreshToken
             raise AssertionError("RefreshToken model must not be used")
 
     monkeypatch.setattr(revocation, "RefreshToken", PoisonRefreshToken(), raising=False)

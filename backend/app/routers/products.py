@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import require_admin
-from app.models import Product, User
+from app.models import Product
 from app.schemas import ProductCreate, ProductUpdate, ProductResponse
 
 router = APIRouter(prefix="/products", tags=["商品"])
@@ -43,7 +43,7 @@ def get_product(product_id: int, db: Session = Depends(get_db)):
 def create_product(
     product_data: ProductCreate,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),  # ← 管理者のみ
+    admin_user_id: str = Depends(require_admin),
 ):
     """
     商品作成（管理者のみ）
@@ -64,7 +64,7 @@ def update_product(
     product_id: int,
     product_data: ProductUpdate,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),  # ← 管理者のみ
+    admin_user_id: str = Depends(require_admin),
 ):
     """商品更新（管理者のみ）"""
     product = db.query(Product).filter(Product.id == product_id).first()
@@ -83,7 +83,7 @@ def update_product(
 def delete_product(
     product_id: int,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),  # ← 管理者のみ
+    admin_user_id: str = Depends(require_admin),
 ):
     """商品削除（管理者のみ）"""
     product = db.query(Product).filter(Product.id == product_id).first()

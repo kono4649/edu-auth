@@ -1,5 +1,5 @@
-plan.mdに従って実装してください。
-plan.mdを一次情報として参照してください。不足情報の補完が必要な場合に限り、Previous Responseや会話履歴を補助的に参照して構いません（Previous Responseは提供されない場合があります）。情報が競合する場合は、/plan内のplan.mdと実際のファイル内容を優先してください。
+auth-architecture-redesign.mdに従って実装してください。
+auth-architecture-redesign.mdを一次情報として参照してください。不足情報の補完が必要な場合に限り、Previous Responseや会話履歴を補助的に参照して構いません（Previous Responseは提供されない場合があります）。
 
 **重要**: 実装と同時に単体テストを追加してください。
 

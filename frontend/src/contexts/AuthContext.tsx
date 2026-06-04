@@ -1,20 +1,15 @@
-/**
- * 認証コンテキスト
- *
- * アプリ全体でユーザーの認証状態を管理する。
- * ログイン・ログアウト・ユーザー情報の取得をここで一元管理。
- */
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
-import { authApi, tokenStorage, type User } from '../api/client'
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import { oidcSession, userApi, type User } from '../api/client'
+import { oidcClient } from '../api/oidc'
 
 interface AuthContextType {
   user: User | null
   isLoading: boolean
   isAuthenticated: boolean
   isAdmin: boolean
-  login: (email: string, password: string) => Promise<void>
+  login: () => Promise<void>
   logout: () => Promise<void>
-  register: (email: string, username: string, password: string) => Promise<void>
+  register: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
@@ -23,52 +18,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  // アプリ起動時: localStorage にトークンがあれば認証状態を復元
   useEffect(() => {
     const initAuth = async () => {
-      const token = tokenStorage.getAccessToken()
-      if (token) {
+      const redirectedUser = await oidcClient.handleRedirectCallback()
+      if (redirectedUser) {
+        setUser(redirectedUser)
+        setIsLoading(false)
+        return
+      }
+
+      if (oidcSession.getAccessToken()) {
         try {
-          const { data } = await authApi.me()
+          const { data } = await userApi.me()
           setUser(data)
         } catch {
-          // トークンが無効（有効期限切れなど）→ クリア
-          tokenStorage.clearTokens()
+          oidcSession.clear()
         }
       }
       setIsLoading(false)
     }
+
     initAuth()
   }, [])
 
-  const login = useCallback(async (email: string, password: string) => {
-    const { data } = await authApi.login({ email, password })
-    tokenStorage.setTokens(data.access_token, data.refresh_token)
-    const { data: userData } = await authApi.me()
-    setUser(userData)
+  const login = useCallback(async () => {
+    await oidcClient.signinRedirect()
   }, [])
 
   const logout = useCallback(async () => {
-    const refreshToken = tokenStorage.getRefreshToken()
-    if (refreshToken) {
-      try {
-        await authApi.logout(refreshToken)
-      } catch {
-        // ログアウト API が失敗しても、ローカルのトークンはクリアする
-      }
-    }
-    tokenStorage.clearTokens()
     setUser(null)
+    await oidcClient.signoutRedirect()
   }, [])
 
-  const register = useCallback(
-    async (email: string, username: string, password: string) => {
-      await authApi.register({ email, username, password })
-      // 登録後に自動ログイン
-      await login(email, password)
-    },
-    [login]
-  )
+  const register = useCallback(async () => {
+    await oidcClient.signinRedirect()
+  }, [])
 
   const value: AuthContextType = {
     user,
