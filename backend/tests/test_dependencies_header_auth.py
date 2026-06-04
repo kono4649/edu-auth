@@ -58,6 +58,14 @@ def test_require_admin_denies_user_role(user_id):
     assert response.status_code == 403
 
 
+def test_require_admin_requires_authenticated_gateway_user():
+    client = TestClient(_build_app())
+
+    response = client.get("/admin-only", headers={"X-Roles": "admin"})
+
+    assert response.status_code == 401
+
+
 def test_require_admin_denies_missing_roles(user_id):
     client = TestClient(_build_app())
 

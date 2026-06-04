@@ -74,6 +74,15 @@ def test_hs256_token_is_rejected_even_with_matching_claims(jwks, user_id):
     assert getattr(exc_info.value, "status_code", None) == 401
 
 
+def test_missing_jti_claim_is_rejected(jwks, make_rs256_token):
+    verifier = _verifier(jwks)
+
+    with pytest.raises(Exception) as exc_info:
+        verifier.verify_access_token(make_rs256_token(jti=None))
+
+    assert getattr(exc_info.value, "status_code", None) == 401
+
+
 def test_jwks_is_cached_for_second_token_with_same_kid(jwks, make_rs256_token):
     jwks_client = CountingJWKSClient(jwks)
     from app.gateway.jwt import JWKSJWTVerifier

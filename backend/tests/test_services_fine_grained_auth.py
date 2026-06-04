@@ -53,10 +53,14 @@ def test_product_service_denies_user_write_operations():
     assert getattr(exc_info.value, "status_code", None) == 403
 
 
-def test_payment_service_requires_payments_write_scope():
+def test_payment_service_allows_payments_write_scope():
     from app.services.payment_service.authorization import assert_payment_write_allowed
 
     assert assert_payment_write_allowed(headers={"X-Scope": "openid payments:write"}) is None
+
+
+def test_payment_service_denies_missing_payments_write_scope():
+    from app.services.payment_service.authorization import assert_payment_write_allowed
 
     with pytest.raises(Exception) as exc_info:
         assert_payment_write_allowed(headers={"X-Scope": "openid profile"})

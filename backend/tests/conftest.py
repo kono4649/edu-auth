@@ -1,4 +1,5 @@
 import base64
+import itertools
 import os
 import sys
 from datetime import datetime, timedelta, timezone
@@ -15,12 +16,12 @@ if str(BACKEND_DIR) not in sys.path:
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def user_id():
     return "2db09e4f-9f32-4d21-9b44-e5e0bb74a0f1"
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def rsa_keypair():
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric import rsa
@@ -39,7 +40,7 @@ def _b64url_uint(value: int) -> str:
     return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def jwks(rsa_keypair):
     private_key, _ = rsa_keypair
     numbers = private_key.public_key().public_numbers()
@@ -60,6 +61,7 @@ def jwks(rsa_keypair):
 @pytest.fixture
 def make_rs256_token(rsa_keypair, user_id):
     _, private_pem = rsa_keypair
+    counter = itertools.count(1)
 
     def _make_token(**overrides):
         now = datetime.now(timezone.utc)
@@ -69,11 +71,15 @@ def make_rs256_token(rsa_keypair, user_id):
             "aud": ["api-gateway"],
             "iat": int(now.timestamp()),
             "exp": int((now + timedelta(minutes=15)).timestamp()),
-            "jti": "unique-token-id",
+            "jti": f"test-token-{next(counter)}",
             "realm_access": {"roles": ["user"]},
             "scope": "openid profile orders:read",
         }
-        claims.update(overrides)
+        for key, value in overrides.items():
+            if value is None:
+                claims.pop(key, None)
+            else:
+                claims[key] = value
         return jwt.encode(
             claims,
             private_pem,

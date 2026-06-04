@@ -1,4 +1,4 @@
-from sqlalchemy.dialects.postgresql import UUID
+import uuid
 
 
 def test_user_model_has_no_password_or_active_fields():
@@ -16,7 +16,7 @@ def test_user_model_uses_uuid_id_and_default_user_role():
     id_column = User.__table__.columns["id"]
     role_column = User.__table__.columns["role"]
 
-    assert isinstance(id_column.type, UUID)
+    assert id_column.type.python_type is uuid.UUID
     assert role_column.default is not None
     assert role_column.default.arg == UserRole.USER
 

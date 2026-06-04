@@ -56,6 +56,18 @@ def test_payments_write_requires_scope(policy):
     assert decision.status_code == 403
 
 
+def test_payments_write_scope_allows_payment_creation(policy):
+    decision = policy.authorize(
+        "POST",
+        "/api/payments",
+        user_id="user-uuid",
+        roles=["user"],
+        scopes=["openid", "profile", "payments:write"],
+    )
+
+    assert decision.allowed is True
+
+
 def test_headers_are_injected_from_verified_claims(user_id):
     from app.gateway.headers import build_downstream_headers
 
