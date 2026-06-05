@@ -1,5 +1,7 @@
 # auth-nz — Authentication & Authorization 学習 ECサイト
 
+[![CI](https://github.com/kono4649/edu-auth/actions/workflows/ci.yml/badge.svg)](https://github.com/kono4649/edu-auth/actions/workflows/ci.yml)
+
 **Authentication（認証）** と **Authorization（認可）** をソースコードを通じて理解するための、学習目的の ECサイトです。
 
 ## 技術スタック
@@ -209,6 +211,18 @@ if (requireAdmin && !isAdmin) return <Navigate to="/forbidden" />
 > ⚠️ **重要**: フロントエンドの認可は UX 目的のみ。
 > ユーザーは開発者ツールや curl で直接 API を叩けるため、
 > **セキュリティの本質はバックエンドの認可にある。**
+
+---
+
+## CI / GitHub Actions
+
+プッシュ・プルリクエスト時に自動でバックエンドのテストを実行します。
+
+| ワークフロー | トリガー | 内容 |
+|-------------|---------|------|
+| `CI` | push / pull_request | バックエンドの pytest を実行 |
+
+ワークフローの定義: `.github/workflows/ci.yml`
 
 ---
 
