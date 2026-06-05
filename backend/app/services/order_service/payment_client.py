@@ -1,4 +1,9 @@
-"""Order Service to Payment Service request helpers."""
+"""サンプル実装: east-west 認証チェーン（Bearer → X-Forwarded-Token 伝播）
+
+このモジュールは現在呼び出し元がなく、production 利用には以下の対応が必要:
+- payment_service 側での X-Forwarded-Token 受信ロジックの実装
+- または mTLS のみで east-west 認証を完結させる設計への変更
+"""
 
 from __future__ import annotations
 

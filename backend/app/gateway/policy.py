@@ -5,6 +5,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
+PUBLIC_PRODUCTS_PATH = "/api/products"
+PRODUCTS_PATH_PREFIX = "/api/products/"
+ADMIN_PATH_PREFIX = "/api/admin/"
+ORDERS_PATH = "/api/orders"
+PAYMENTS_PATH = "/api/payments"
+PAYMENTS_PATH_PREFIX = "/api/payments/"
+PAYMENT_WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+
+
 @dataclass(frozen=True)
 class PolicyDecision:
     allowed: bool
@@ -22,13 +31,13 @@ class GatewayPolicy:
     ) -> PolicyDecision:
         normalized_method = method.upper()
 
-        if normalized_method == "GET" and path == "/api/products":
+        if normalized_method == "GET" and path == PUBLIC_PRODUCTS_PATH:
             return PolicyDecision(allowed=True)
 
         if self._requires_admin(normalized_method, path):
             return self._require_authenticated_role(user_id, roles, "admin")
 
-        if normalized_method == "GET" and path == "/api/orders":
+        if normalized_method == "GET" and path == ORDERS_PATH:
             return self._require_authenticated(user_id)
 
         if self._requires_payment_write_scope(normalized_method, path):
@@ -42,14 +51,14 @@ class GatewayPolicy:
 
     def _requires_admin(self, method: str, path: str) -> bool:
         return (
-            (method == "POST" and path == "/api/products")
-            or (method == "DELETE" and path.startswith("/api/products/"))
-            or path.startswith("/api/admin/")
+            (method == "POST" and path == PUBLIC_PRODUCTS_PATH)
+            or (method == "DELETE" and path.startswith(PRODUCTS_PATH_PREFIX))
+            or path.startswith(ADMIN_PATH_PREFIX)
         )
 
     def _requires_payment_write_scope(self, method: str, path: str) -> bool:
-        payment_path = path == "/api/payments" or path.startswith("/api/payments/")
-        return payment_path and method in {"POST", "PUT", "PATCH", "DELETE"}
+        payment_path = path == PAYMENTS_PATH or path.startswith(PAYMENTS_PATH_PREFIX)
+        return payment_path and method in PAYMENT_WRITE_METHODS
 
     def _require_authenticated(self, user_id: str | None) -> PolicyDecision:
         if user_id is None:

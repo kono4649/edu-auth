@@ -2,20 +2,35 @@
 
 **参照レビュー:** `docs/review/arch-review-codex-write-test-20260604.md`  
 **作成日:** 2026-06-05  
-**対象:** REJECT 2件 / WARN 4件
+**対象:** REJECT 2件 / WARN 4件  
+**実装状況:** 完了  
+**実装日:** 2026-06-05  
+**検証:** `python3 -m pytest backend/tests`（47 passed, 6 warnings）
 
 ---
 
 ## 対応サマリー
 
-| ID | 分類 | 内容 | 方針 |
-|----|------|------|------|
-| R1 | 🔴 REJECT | `orders.py` の `_parse_user_uuid` DRY 違反 | `parse_gateway_user_uuid` に統一 |
-| R2 | 🔴 REJECT | `AuditLogger` / `RedisTokenRevocationStore` が未接続 | 削除・Gateway 責務として明記 |
-| W1 | 🟡 WARN | `schemas.py` 未使用 5 クラス残存 | 削除 |
-| W2 | 🟡 WARN | `services/*/authorization.py` がルーター未接続 | 削除・router 直接実装に一本化 |
-| W3 | 🟡 WARN | `payment_client.py` / `transport.py` の east-west 契約不整合 | サンプルとして明示 |
-| W4 | 🟡 WARN | `gateway/policy.py` パスリテラルの型安全性なし | 定数化 |
+| ID | 分類 | 内容 | 方針 | 状況 |
+|----|------|------|------|------|
+| R1 | 🔴 REJECT | `orders.py` の `_parse_user_uuid` DRY 違反 | `parse_gateway_user_uuid` に統一 | ✅ 完了 |
+| R2 | 🔴 REJECT | `AuditLogger` / `RedisTokenRevocationStore` が未接続 | 削除・Gateway 責務として明記 | ✅ 完了 |
+| W1 | 🟡 WARN | `schemas.py` 未使用 5 クラス残存 | 削除 | ✅ 完了 |
+| W2 | 🟡 WARN | `services/*/authorization.py` がルーター未接続 | 削除・router 直接実装に一本化 | ✅ 完了 |
+| W3 | 🟡 WARN | `payment_client.py` / `transport.py` の east-west 契約不整合 | サンプルとして明示 | ✅ 完了 |
+| W4 | 🟡 WARN | `gateway/policy.py` パスリテラルの型安全性なし | 定数化 | ✅ 完了 |
+
+---
+
+## 実装結果サマリー
+
+- `backend/tests/test_arch_review_fix_contract.py` を追加し、レビュー指摘へのアーキテクチャ契約をテストで固定した。
+- `orders.py` の UUID 変換は `app.dependencies.parse_gateway_user_uuid` に統一した。
+- 未接続だった `app/audit.py` / `app/revocation.py` と対応テストを削除し、README に Gateway 側責務として明記した。
+- 未使用の auth/token 系 schema 5 クラスを削除した。
+- `services/*/authorization.py` を削除し、router 側の認可実装を正とした。
+- east-west 認証チェーンの helper はサンプル実装であることを docstring/comment で明示した。
+- `gateway/policy.py` の API パスリテラルをモジュール定数へ集約した。
 
 ---
 
@@ -32,6 +47,8 @@
 - `orders.py` に `_parse_user_uuid` が存在しないこと
 - `parse_gateway_user_uuid` が import・使用されていること
 - 既存テストが通ること
+
+**実装結果:** 完了。`orders.py` はローカル parser を持たず、共有 parser を使用する。
 
 ---
 
@@ -55,6 +72,8 @@
 - テストが通ること
 - README に方針が明記されていること
 
+**実装結果:** 完了。`backend/app/audit.py`、`backend/app/revocation.py`、`backend/tests/test_audit_log.py`、`backend/tests/test_token_revocation.py` を削除した。
+
 ---
 
 ## W1: `schemas.py` 未使用 5 クラスを削除
@@ -75,6 +94,8 @@
 **検証条件:**
 - `schemas.py` に上記 5 クラスが存在しないこと
 - コードベース上に参照が残っていないこと
+
+**実装結果:** 完了。削除後に未使用となった `EmailStr` import も除去した。
 
 ---
 
@@ -101,6 +122,8 @@
 - router 側の認可実装に漏れがないこと
 - テストが通ること
 
+**実装結果:** 完了。対応する旧 authorization テストは削除対象モジュール前提のため整理し、east-west helper のテストのみ残した。
+
 ---
 
 ## W3: `payment_client.py` / `transport.py` をサンプルとして明示
@@ -122,6 +145,8 @@
 **検証条件:**
 - 両ファイルに設計意図を説明するコメント/docstring が存在すること
 
+**実装結果:** 完了。`payment_client.py` にサンプル実装 docstring、`transport.py` に `X-Forwarded-Token` 未実装コメントを追加した。
+
 ---
 
 ## W4: `gateway/policy.py` パスリテラルを定数化
@@ -135,6 +160,8 @@
 **検証条件:**
 - パスリテラルが定数として集約されていること
 - 挙動が変わっていないこと（既存テスト通過）
+
+**実装結果:** 完了。`PUBLIC_PRODUCTS_PATH`、`PRODUCTS_PATH_PREFIX`、`ADMIN_PATH_PREFIX`、`ORDERS_PATH`、`PAYMENTS_PATH`、`PAYMENTS_PATH_PREFIX`、`PAYMENT_WRITE_METHODS` に集約した。
 
 ---
 
@@ -150,3 +177,19 @@
 5. W2  services/*/authorization.py 全削除（テスト削除を伴う）
 6. R2  audit.py / revocation.py 削除 + README 更新
 ```
+
+---
+
+## 最終検証
+
+```bash
+python3 -m pytest backend/tests
+```
+
+結果:
+
+```text
+47 passed, 6 warnings
+```
+
+警告は既存の Pydantic `Config` と SQLAlchemy `declarative_base()` の deprecation。

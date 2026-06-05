@@ -6,35 +6,9 @@ import uuid
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 
 from app.models import UserRole, OrderStatus
-
-
-class UserRegister(BaseModel):
-    email: EmailStr
-    username: str
-    password: str
-
-
-class UserLogin(BaseModel):
-    email: EmailStr
-    password: str
-
-
-class TokenResponse(BaseModel):
-    access_token: str
-    refresh_token: str
-    token_type: str = "bearer"
-
-
-class TokenRefreshRequest(BaseModel):
-    refresh_token: str
-
-
-class AccessTokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
 
 
 class UserResponse(BaseModel):

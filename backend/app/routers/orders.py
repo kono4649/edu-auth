@@ -13,27 +13,21 @@
 from __future__ import annotations
 
 from typing import List
-import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import get_current_roles, get_current_user, require_admin
+from app.dependencies import (
+    get_current_roles,
+    get_current_user,
+    parse_gateway_user_uuid,
+    require_admin,
+)
 from app.models import Order, OrderItem, Product, UserRole
 from app.schemas import OrderCreate, OrderResponse, OrderStatusUpdate
 
 router = APIRouter(prefix="/orders", tags=["注文"])
-
-
-def _parse_user_uuid(user_id: str) -> uuid.UUID:
-    try:
-        return uuid.UUID(user_id)
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Gateway ユーザーIDが UUID ではありません",
-        ) from exc
 
 
 @router.get("", response_model=List[OrderResponse])
@@ -53,7 +47,7 @@ def list_orders(
     """
     if UserRole.ADMIN.value in roles:
         return db.query(Order).all()
-    return db.query(Order).filter(Order.user_id == _parse_user_uuid(current_user_id)).all()
+    return db.query(Order).filter(Order.user_id == parse_gateway_user_uuid(current_user_id)).all()
 
 
 @router.get("/{order_id}", response_model=OrderResponse)
@@ -78,7 +72,7 @@ def get_order(
         raise HTTPException(status_code=404, detail="注文が見つかりません")
 
     # 自分の注文でも管理者でもない場合は403
-    if UserRole.ADMIN.value not in roles and order.user_id != _parse_user_uuid(current_user_id):
+    if UserRole.ADMIN.value not in roles and order.user_id != parse_gateway_user_uuid(current_user_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="この注文にアクセスする権限がありません",
@@ -117,7 +111,7 @@ def create_order(
         total += product.price * item_data.quantity
         items.append((product, item_data.quantity))
 
-    order = Order(user_id=_parse_user_uuid(current_user_id), total_amount=total)
+    order = Order(user_id=parse_gateway_user_uuid(current_user_id), total_amount=total)
     db.add(order)
     db.flush()
 
