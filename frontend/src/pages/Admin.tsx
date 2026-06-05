@@ -29,25 +29,13 @@ export function Admin() {
     }
   }
 
-  const handleRoleChange = async (userId: number, newRole: string) => {
+  const handleRoleChange = async (userId: string, newRole: string) => {
     try {
       await adminApi.updateRole(userId, newRole)
       setMessage('ロールを更新しました')
       loadUsers()
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || '更新に失敗しました'
-      setMessage(msg)
-    }
-  }
-
-  const handleDeactivate = async (userId: number) => {
-    if (!confirm('このユーザーを無効化しますか？')) return
-    try {
-      await adminApi.deactivateUser(userId)
-      setMessage('ユーザーを無効化しました')
-      loadUsers()
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || '操作に失敗しました'
       setMessage(msg)
     }
   }
@@ -76,7 +64,6 @@ export function Admin() {
               <th style={styles.th}>ユーザー名</th>
               <th style={styles.th}>メール</th>
               <th style={styles.th}>ロール</th>
-              <th style={styles.th}>状態</th>
               <th style={styles.th}>操作</th>
             </tr>
           </thead>
@@ -101,16 +88,7 @@ export function Admin() {
                   </select>
                 </td>
                 <td style={styles.td}>
-                  <span style={user.is_active ? styles.activeBadge : styles.inactiveBadge}>
-                    {user.is_active ? '有効' : '無効'}
-                  </span>
-                </td>
-                <td style={styles.td}>
-                  {user.id !== currentUser?.id && user.is_active && (
-                    <button onClick={() => handleDeactivate(user.id)} style={styles.deactivateBtn}>
-                      無効化
-                    </button>
-                  )}
+                  {user.id === currentUser?.id ? '自分自身は変更不可' : 'IdP 側で状態管理'}
                 </td>
               </tr>
             ))}
@@ -135,7 +113,4 @@ const styles: Record<string, React.CSSProperties> = {
   currentRow: { background: '#f0f4ff' },
   selfBadge: { color: '#888', fontSize: '0.8rem' },
   roleSelect: { padding: '0.25rem', border: '1px solid #ddd', borderRadius: '4px' },
-  activeBadge: { background: '#e8f5e9', color: '#2e7d32', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.8rem' },
-  inactiveBadge: { background: '#fce4ec', color: '#c62828', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.8rem' },
-  deactivateBtn: { background: '#e53935', color: 'white', border: 'none', padding: '0.3rem 0.6rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' },
 }

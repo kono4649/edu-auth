@@ -166,6 +166,10 @@ def get_order(order_id: int, current_user: User = Depends(get_current_user)):
         raise HTTPException(403, "この注文にアクセスする権限がありません")
 ```
 
+### Gateway 境界の責務
+
+監査ログおよびトークン失効（JTI ブラックリスト）はAPIゲートウェイ側の責務として設計しています。バックエンドはゲートウェイが検証済みのヘッダーを信頼するのみで、独自の失効管理は行いません。
+
 ---
 
 ## フロントエンドの認証・認可

@@ -1,10 +1,12 @@
-"""
-開発用シードデータ
-管理者ユーザーとサンプル商品を作成する
-"""
+"""開発用シードデータ。"""
+
+import uuid
+
 from app.database import SessionLocal, engine, Base
 from app.models import User, Product, UserRole
-from app.auth import hash_password
+
+ADMIN_USER_ID = uuid.UUID("11111111-1111-4111-8111-111111111111")
+SAMPLE_USER_ID = uuid.UUID("22222222-2222-4222-8222-222222222222")
 
 Base.metadata.create_all(bind=engine)
 
@@ -14,24 +16,24 @@ db = SessionLocal()
 admin = db.query(User).filter(User.email == "admin@example.com").first()
 if not admin:
     admin = User(
+        id=ADMIN_USER_ID,
         email="admin@example.com",
         username="admin",
-        hashed_password=hash_password("admin123"),
         role=UserRole.ADMIN,
     )
     db.add(admin)
-    print("管理者ユーザーを作成しました: admin@example.com / admin123")
+    print("管理者ユーザーを作成しました: admin@example.com")
 
 # 一般ユーザー
 user = db.query(User).filter(User.email == "user@example.com").first()
 if not user:
     user = User(
+        id=SAMPLE_USER_ID,
         email="user@example.com",
         username="testuser",
-        hashed_password=hash_password("user123"),
     )
     db.add(user)
-    print("一般ユーザーを作成しました: user@example.com / user123")
+    print("一般ユーザーを作成しました: user@example.com")
 
 # サンプル商品
 products = [

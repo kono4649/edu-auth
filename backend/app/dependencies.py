@@ -1,110 +1,73 @@
-"""
-FastAPI 依存性注入（Dependency Injection）による認証・認可ミドルウェア
+"""Gateway が注入した認証ヘッダーを読む FastAPI 依存関係。"""
 
-【学習ポイント】
-FastAPI の Depends() を使って、エンドポイントに認証・認可チェックを注入する。
-これにより：
-1. 認証ロジックを一箇所に集約できる
-2. ルーター関数は「認証済みユーザー」を前提に処理を書ける
-3. テスト時に差し替えが容易
-"""
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.orm import Session
+from __future__ import annotations
 
-from app.auth import decode_token
-from app.database import get_db
-from app.models import User, UserRole
+import uuid
+from typing import List, Optional
 
-# Bearer トークンの抽出
-# Authorization: Bearer <token> ヘッダーから自動的にトークンを取り出す
-bearer_scheme = HTTPBearer()
+from fastapi import Depends, Header, HTTPException, status
+
+from app.models import UserRole
+
+USER_ID_HEADER = "X-User-ID"
+ROLES_HEADER = "X-Roles"
+SCOPE_HEADER = "X-Scope"
+
+
+def parse_csv_header(value: Optional[str]) -> List[str]:
+    if value is None:
+        return []
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def parse_scope_header(value: Optional[str]) -> List[str]:
+    if value is None:
+        return []
+    return value.split()
 
 
 def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
-    db: Session = Depends(get_db),
-) -> User:
-    """
-    【Authentication 依存関係】
-    リクエストの JWT アクセストークンを検証し、現在のユーザーを返す。
-
-    失敗ケース:
-    - トークンなし → 401 Unauthorized
-    - トークン不正・期限切れ → 401 Unauthorized
-    - type が "access" でない → 401 Unauthorized（リフレッシュトークンで API 呼び出しを防ぐ）
-    - ユーザーが存在しない → 401 Unauthorized
-    - ユーザーが無効化されている → 403 Forbidden
-    """
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="認証情報が無効です",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-
-    token = credentials.credentials
-    payload = decode_token(token)
-
-    if payload is None:
-        raise credentials_exception
-
-    # トークン種別チェック: リフレッシュトークンで API アクセスさせない
-    if payload.get("type") != "access":
-        raise credentials_exception
-
-    user_id = payload.get("sub")
-    if user_id is None:
-        raise credentials_exception
-
-    user = db.query(User).filter(User.id == int(user_id)).first()
-    if user is None:
-        raise credentials_exception
-
-    if not user.is_active:
+    x_user_id: Optional[str] = Header(default=None, alias=USER_ID_HEADER),
+) -> str:
+    if x_user_id is None or x_user_id == "":
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="アカウントが無効化されています",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Gateway 認証ヘッダーがありません",
         )
-
-    return user
-
-
-def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
-    """
-    アクティブなユーザーのみを返す依存関係
-    （get_current_user のラッパー、明示的な用途分けのため）
-    """
-    return current_user
+    return x_user_id
 
 
-def require_admin(current_user: User = Depends(get_current_user)) -> User:
-    """
-    【Authorization 依存関係】
-    管理者ロールを持つユーザーのみアクセスを許可する。
+def parse_gateway_user_uuid(user_id: str) -> uuid.UUID:
+    try:
+        return uuid.UUID(user_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Gateway ユーザーIDが UUID ではありません",
+        ) from exc
 
-    通常ユーザーが管理者エンドポイントにアクセスしようとすると 403 Forbidden を返す。
-    これが「認可（Authorization）」の本質：
-      - 認証済み（誰かは分かった）でも、
-      - ロールが不足していればアクセス拒否
-    """
-    if current_user.role != UserRole.ADMIN:
+
+def get_current_roles(
+    x_roles: Optional[str] = Header(default=None, alias=ROLES_HEADER),
+) -> List[str]:
+    return parse_csv_header(x_roles)
+
+
+def require_admin(
+    current_user_id: str = Depends(get_current_user),
+    roles: List[str] = Depends(get_current_roles),
+) -> str:
+    if UserRole.ADMIN.value not in roles:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="管理者権限が必要です",
         )
-    return current_user
+    return current_user_id
 
 
 def get_optional_user(
-    db: Session = Depends(get_db),
-    credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer(auto_error=False)),
-) -> User | None:
-    """
-    任意認証: トークンがあれば検証、なくても OK（商品一覧など）
-    """
-    if credentials is None:
+    x_user_id: Optional[str] = Header(default=None, alias=USER_ID_HEADER),
+) -> Optional[str]:
+    if x_user_id is None or x_user_id == "":
         return None
-    try:
-        return get_current_user(credentials, db)
-    except HTTPException:
-        return None
+    return x_user_id
